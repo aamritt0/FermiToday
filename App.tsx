@@ -1,20 +1,910 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Text,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  View,
+  Animated,
+  StatusBar,
+  RefreshControl,
+  Switch,
+  ScrollView,
+  Modal,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialIcons } from '@expo/vector-icons';
+import axios from 'axios';
+import Constants from 'expo-constants';
+
+
+const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl;
+
+type Event = {
+  id: string;
+  summary: string;
+  description: string;
+  start: string;
+  end: string;
+};
+
+const EventCard = ({ item, index, isDark }: { item: Event; index: number; isDark: boolean }) => {
+  const animValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animValue, {
+      toValue: 1,
+      duration: 400,
+      delay: index * 100,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const cardStyle = isDark ? styles.eventCardDark : styles.eventCard;
+  const summaryStyle = isDark ? styles.summaryDark : styles.summary;
+  const descriptionStyle = isDark ? styles.descriptionDark : styles.description;
+  const timeContainerStyle = isDark ? styles.timeContainerDark : styles.timeContainer;
+  const timeTextStyle = isDark ? styles.timeTextDark : styles.timeText;
+
+  const iconColor = isDark ? '#999' : '#666';
+
+  return (
+    <Animated.View
+      style={[
+        cardStyle,
+        {
+          opacity: animValue,
+          transform: [
+            {
+              translateY: animValue.interpolate({
+                inputRange: [0, 1],
+                outputRange: [30, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <View style={styles.eventAccent} />
+      <View style={styles.eventContent}>
+        <Text style={summaryStyle}>{item.summary}</Text>
+        {item.description ? (
+          <Text style={descriptionStyle}>{item.description}</Text>
+        ) : null}
+        <View style={timeContainerStyle}>
+          <MaterialIcons name="schedule" size={16} color={iconColor} style={styles.timeIcon} />
+          <Text style={timeTextStyle}>
+            {new Date(item.start).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}{' '}
+            -{' '}
+            {new Date(item.end).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Text>
+        </View>
+      </View>
+    </Animated.View>
+  );
+};
 
 export default function App() {
+  const [section, setSection] = useState('');
+  const [savedSections, setSavedSections] = useState<string[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [dateFilter] = useState<'today'>('today');
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  // Load settings from AsyncStorage
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  // Save settings whenever they change
+  useEffect(() => {
+    saveSettings();
+  }, [isDark, savedSections]);
+
+  const loadSettings = async () => {
+    try {
+      const darkMode = await AsyncStorage.getItem('darkMode');
+      const sections = await AsyncStorage.getItem('savedSections');
+      
+      if (darkMode !== null) {
+        setIsDark(JSON.parse(darkMode));
+      }
+      
+      if (sections !== null) {
+        setSavedSections(JSON.parse(sections));
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      await AsyncStorage.setItem('darkMode', JSON.stringify(isDark));
+      await AsyncStorage.setItem('savedSections', JSON.stringify(savedSections));
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+
+  const fetchEvents = async (isRefresh = false) => {
+    if (!section.trim()) {
+      alert('Please enter a section');
+      return;
+    }
+
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const res = await axios.get(`${BACKEND_URL}/events`, {
+        params: { 
+          section,
+          filter: dateFilter 
+        },
+      });
+      setEvents(res.data);
+
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to fetch events.');
+    }
+
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  const onRefresh = () => {
+    fetchEvents(true);
+  };
+
+  const addSection = () => {
+    const trimmedSection = section.trim();
+    if (trimmedSection && !savedSections.includes(trimmedSection)) {
+      setSavedSections([...savedSections, trimmedSection]);
+    }
+  };
+
+  const removeSection = (sectionToRemove: string) => {
+    setSavedSections(savedSections.filter(s => s !== sectionToRemove));
+  };
+
+  useEffect(() => {
+    if (section.trim()) {
+      fetchEvents();
+    }
+  }, []);
+
+  const containerStyle = isDark ? styles.containerDark : styles.container;
+  const headerStyle = isDark ? styles.headerDark : styles.header;
+  const titleStyle = isDark ? styles.titleDark : styles.title;
+  const subtitleStyle = isDark ? styles.subtitleDark : styles.subtitle;
+  const searchContainerStyle = isDark ? styles.searchContainerDark : styles.searchContainer;
+  const inputStyle = isDark ? styles.inputDark : styles.input;
+  const emptyTitleStyle = isDark ? styles.emptyTitleDark : styles.emptyTitle;
+  const emptyTextStyle = isDark ? styles.emptyTextDark : styles.emptyText;
+  const modalStyle = isDark ? styles.modalContentDark : styles.modalContent;
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaView style={containerStyle} edges={['top', 'left', 'right']}>
+      <StatusBar 
+        barStyle={isDark ? "light-content" : "dark-content"} 
+        backgroundColor={isDark ? '#1a1a1a' : '#fff'} 
+      />
+
+      <View style={headerStyle}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={titleStyle}>Schedule</Text>
+            <Text style={subtitleStyle}>Today's Variations</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => setShowSettings(true)}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="settings" size={28} color={isDark ? '#fff' : '#1a1a1a'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={searchContainerStyle}>
+        <View style={styles.inputWrapper}>
+          <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>SECTION</Text>
+          <TextInput
+            style={inputStyle}
+            value={section}
+            onChangeText={setSection}
+            placeholder="Enter section(1A ecc.)"
+            placeholderTextColor={isDark ? '#666' : '#999'}
+          />
+        </View>
+        <TouchableOpacity
+          style={styles.fetchButton}
+          onPress={() => fetchEvents()}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
+          <Text style={styles.fetchButtonText}>Search</Text>
+        </TouchableOpacity>
+      </View>
+
+      {savedSections.length > 0 && (
+        <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickSelectContent}
+          >
+            {savedSections.map((sec) => (
+              <TouchableOpacity
+                key={sec}
+                style={[
+                  styles.quickButton,
+                  section === sec && styles.quickButtonActive,
+                  isDark && section !== sec && styles.quickButtonDark,
+                ]}
+                onPress={() => {
+                  setSection(sec);
+                  setTimeout(() => fetchEvents(), 100);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  section === sec && styles.quickButtonTextActive,
+                  isDark && section !== sec && styles.quickButtonTextDark,
+                ]}>
+                  {sec}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      <Animated.View
+        style={[
+          styles.content,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <View style={styles.loader}>
+              <MaterialIcons name="hourglass-empty" size={48} color={isDark ? '#999' : '#666'} />
+              <Text style={[styles.loaderText, isDark && styles.loaderTextDark]}>Loading...</Text>
+            </View>
+          </View>
+        ) : events.length === 0 ? (
+          <View style={styles.centerContainer}>
+            <MaterialIcons name="event-available" size={64} color={isDark ? '#666' : '#999'} />
+            <Text style={emptyTitleStyle}>All Clear!</Text>
+            <Text style={emptyTextStyle}>
+              No schedule variations found
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={events}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item, index }) => (
+              <EventCard item={item} index={index} isDark={isDark} />
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#6366f1"
+                colors={['#6366f1']}
+              />
+            }
+          />
+        )}
+      </Animated.View>
+
+      <Modal
+        visible={showSettings}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={modalStyle}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Settings</Text>
+              <TouchableOpacity onPress={() => setShowSettings(false)}>
+                <MaterialIcons name="close" size={28} color={isDark ? '#999' : '#666'} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <MaterialIcons name="dark-mode" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                  <View style={styles.settingTextContainer}>
+                    <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Dark Mode</Text>
+                    <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>
+                      Toggle dark theme
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isDark}
+                  onValueChange={setIsDark}
+                  trackColor={{ false: '#d1d5db', true: '#818cf8' }}
+                  thumbColor={isDark ? '#6366f1' : '#f3f4f6'}
+                />
+              </View>
+
+              <View style={[styles.separator, isDark && styles.separatorDark]} />
+
+              <View style={styles.sectionHeader}>
+                <MaterialIcons name="bookmark" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                <View style={styles.sectionHeaderText}>
+                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+                    Saved Sections
+                  </Text>
+                  <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>
+                    Quick access to your favorite sections
+                  </Text>
+                </View>
+              </View>
+
+              {savedSections.map((sec) => (
+                <View key={sec} style={[styles.savedSectionRow, isDark && styles.savedSectionRowDark]}>
+                  <View style={styles.savedSectionLeft}>
+                    <MaterialIcons name="class" size={20} color={isDark ? '#fff' : '#1a1a1a'} />
+                    <Text style={[styles.savedSectionText, isDark && styles.savedSectionTextDark]}>
+                      {sec}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeSection(sec)}>
+                    <MaterialIcons name="delete" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={styles.addSectionButton}
+                onPress={addSection}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
+                <Text style={styles.addSectionText}>Add Current Section</Text>
+              </TouchableOpacity>
+
+              <View style={[styles.separator, isDark && styles.separatorDark]} />
+
+              <View style={styles.sectionHeader}>
+                <MaterialIcons name="info" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                <View style={styles.sectionHeaderText}>
+                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+                    About
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.aboutText, isDark && styles.aboutTextDark]}>
+                School Schedule Variations App
+              </Text>
+              <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
+                View daily schedule variations for your section. Simply enter your class section to see any changes to today's schedule.
+              </Text>
+              <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
+                Version 1.0.0
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  containerDark: {
+    flex: 1,
+    backgroundColor: '#0f0f0f',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 8,
     backgroundColor: '#fff',
+  },
+  headerDark: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: '#1a1a1a',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  settingsButton: {
+    padding: 8,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    letterSpacing: -0.5,
+  },
+  titleDark: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  subtitleDark: {
+    fontSize: 16,
+    color: '#999',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#fff',
+    alignItems: 'flex-end',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchContainerDark: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'flex-end',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  inputWrapper: {
+    flex: 1,
+    marginRight: 12,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  inputLabelDark: {
+    color: '#999',
+  },
+  input: {
+    backgroundColor: '#f5f5f7',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: '#1a1a1a',
+    fontWeight: '600',
+  },
+  inputDark: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  fetchButton: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  searchIcon: {
+    marginRight: 4,
+  },
+  fetchButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  quickSelectWrapper: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  quickSelectWrapperDark: {
+    backgroundColor: '#1a1a1a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  quickSelectContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  quickButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f7',
+    marginRight: 8,
+  },
+  quickButtonDark: {
+    backgroundColor: '#3a3a3a',
+  },
+  quickButtonActive: {
+    backgroundColor: '#6366f1',
+  },
+  quickButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  quickButtonTextDark: {
+    color: '#e0e0e0',
+  },
+  quickButtonTextActive: {
+    color: '#fff',
+  },
+  content: {
+    flex: 1,
+  },
+  listContent: {
+    padding: 20,
+    paddingBottom: 32,
+  },
+  eventCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    flexDirection: 'row',
+  },
+  eventCardDark: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 3,
+    flexDirection: 'row',
+  },
+  eventAccent: {
+    width: 5,
+    backgroundColor: '#6366f1',
+  },
+  eventContent: {
+    flex: 1,
+    padding: 18,
+  },
+  summary: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  summaryDark: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  description: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  descriptionDark: {
+    fontSize: 14,
+    color: '#999',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  timeContainerDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  timeIcon: {
+    marginRight: 6,
+  },
+  timeText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+  timeTextDark: {
+    fontSize: 13,
+    color: '#999',
+    fontWeight: '600',
+  },
+  centerContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loader: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  loaderText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  loaderTextDark: {
+    color: '#999',
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  emptyTitleDark: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  emptyTextDark: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalContentDark: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  modalTitleDark: {
+    color: '#ffffff',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1,
+  },
+  settingTextContainer: {
+    flex: 1,
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  settingLabelDark: {
+    color: '#ffffff',
+  },
+  settingSubtext: {
+    fontSize: 13,
+    color: '#666',
+  },
+  settingSubtextDark: {
+    color: '#999',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginVertical: 16,
+  },
+  separatorDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 12,
+  },
+  sectionHeaderText: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  sectionTitleDark: {
+    color: '#ffffff',
+  },
+  sectionSubtext: {
+    fontSize: 13,
+    color: '#666',
+  },
+  sectionSubtextDark: {
+    color: '#999',
+  },
+  savedSectionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f5f5f7',
+    borderRadius: 12,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  savedSectionRowDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  savedSectionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  savedSectionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  savedSectionTextDark: {
+    color: '#ffffff',
+  },
+  addSectionButton: {
+    backgroundColor: '#6366f1',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addIcon: {
+    marginRight: 4,
+  },
+  addSectionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  aboutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  aboutTextDark: {
+    color: '#ffffff',
+  },
+  aboutSubtext: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  aboutSubtextDark: {
+    color: '#999',
+  },
+  aboutVersion: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  aboutVersionDark: {
+    color: '#666',
   },
 });
