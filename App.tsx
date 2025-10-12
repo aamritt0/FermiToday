@@ -12,15 +12,15 @@ import {
   Switch,
   ScrollView,
   Modal,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
-import axios from 'axios';
 import Constants from 'expo-constants';
+import axios from 'axios';
 
-
-const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl;
+const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || 'http://localhost:3000';
 
 type Event = {
   id: string;
@@ -100,7 +100,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [dateFilter] = useState<'today'>('today');
+  const [dateFilter, setDateFilter] = useState<'today' | 'tomorrow'>('today');
+  const [viewMode, setViewMode] = useState<'section' | 'all'>('section');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -141,8 +142,15 @@ export default function App() {
     }
   };
 
-  const fetchEvents = async (isRefresh = false) => {
-    if (!section.trim()) {
+  const fetchEvents = async (isRefresh = false, targetSection?: string, targetDate?: 'today' | 'tomorrow') => {
+    // Dismiss keyboard when searching
+    Keyboard.dismiss();
+    
+    // Convert section to uppercase for the request
+    const sectionToFetch = (targetSection || section).toUpperCase();
+    const dateToFetch = targetDate || dateFilter;
+
+    if (viewMode === 'section' && !sectionToFetch.trim()) {
       alert('Please enter a section');
       return;
     }
@@ -154,13 +162,43 @@ export default function App() {
     }
 
     try {
-      const res = await axios.get(`${BACKEND_URL}/events`, {
-        params: { 
-          section,
-          filter: dateFilter 
-        },
-      });
+      // Calculate date
+      const today = new Date();
+      const targetDateObj = dateToFetch === 'tomorrow' 
+        ? new Date(today.getTime() + 24 * 60 * 60 * 1000)
+        : today;
+      const dateStr = targetDateObj.toISOString().split('T')[0];
+
+      let res;
+      if (viewMode === 'all') {
+        // Fetch all events for the day
+        res = await axios.get(`${BACKEND_URL}/events`, {
+          params: { date: dateStr },
+        });
+      } else {
+        // Fetch events for specific section
+        res = await axios.get(`${BACKEND_URL}/events`, {
+          params: { 
+            section: sectionToFetch,
+            date: dateStr
+          },
+        });
+      }
+
       setEvents(res.data);
+
+      // Filter events to only show the requested day
+      const filteredEvents = res.data.filter((event: Event) => {
+        const eventDate = new Date(event.start).toISOString().split('T')[0];
+        return eventDate === dateStr;
+      });
+
+      // Sort events by start time
+      const sortedEvents = [...filteredEvents].sort((a, b) => {
+        return new Date(a.start).getTime() - new Date(b.start).getTime();
+      });
+
+      setEvents(sortedEvents);
 
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -189,7 +227,7 @@ export default function App() {
   };
 
   const addSection = () => {
-    const trimmedSection = section.trim();
+    const trimmedSection = section.trim().toUpperCase();
     if (trimmedSection && !savedSections.includes(trimmedSection)) {
       setSavedSections([...savedSections, trimmedSection]);
     }
@@ -199,11 +237,29 @@ export default function App() {
     setSavedSections(savedSections.filter(s => s !== sectionToRemove));
   };
 
+  const handleQuickSectionSelect = (sec: string) => {
+    Keyboard.dismiss();
+    setSection(sec);
+    setViewMode('section');
+    // Fetch immediately with the selected section
+    setTimeout(() => fetchEvents(false, sec, dateFilter), 50);
+  };
+
+  // Fetch when date filter or view mode changes
   useEffect(() => {
-    if (section.trim()) {
+    if (viewMode === 'all') {
       fetchEvents();
+    } else if (viewMode === 'section') {
+      // Clear events when switching to section mode without a section selected
+      if (!section.trim()) {
+        setEvents([]);
+        fadeAnim.setValue(0);
+        slideAnim.setValue(50);
+      } else {
+        fetchEvents();
+      }
     }
-  }, []);
+  }, [dateFilter, viewMode]);
 
   const containerStyle = isDark ? styles.containerDark : styles.container;
   const headerStyle = isDark ? styles.headerDark : styles.header;
@@ -215,6 +271,12 @@ export default function App() {
   const emptyTextStyle = isDark ? styles.emptyTextDark : styles.emptyText;
   const modalStyle = isDark ? styles.modalContentDark : styles.modalContent;
 
+  const getSubtitle = () => {
+    const dateText = dateFilter === 'today' ? 'Today' : 'Tomorrow';
+    const modeText = viewMode === 'all' ? 'All Sections' : section || 'Select Section';
+    return `${dateText} - ${modeText}`;
+  };
+
   return (
     <SafeAreaView style={containerStyle} edges={['top', 'left', 'right']}>
       <StatusBar 
@@ -225,8 +287,8 @@ export default function App() {
       <View style={headerStyle}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={titleStyle}>Schedule</Text>
-            <Text style={subtitleStyle}>Today's Variations</Text>
+            <Text style={titleStyle}>Variazioni</Text>
+            <Text style={subtitleStyle}>{getSubtitle()}</Text>
           </View>
           <TouchableOpacity
             style={styles.settingsButton}
@@ -238,28 +300,77 @@ export default function App() {
         </View>
       </View>
 
-      <View style={searchContainerStyle}>
-        <View style={styles.inputWrapper}>
-          <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>SECTION</Text>
-          <TextInput
-            style={inputStyle}
-            value={section}
-            onChangeText={setSection}
-            placeholder="Enter section(1A ecc.)"
-            placeholderTextColor={isDark ? '#666' : '#999'}
-          />
-        </View>
+      {/* View Mode Selector */}
+      <View style={[styles.viewModeContainer, isDark && styles.viewModeContainerDark]}>
         <TouchableOpacity
-          style={styles.fetchButton}
-          onPress={() => fetchEvents()}
-          activeOpacity={0.8}
+          style={[
+            styles.viewModeButton,
+            viewMode === 'section' && styles.viewModeButtonActive,
+            isDark && styles.viewModeButtonDark,
+          ]}
+          onPress={() => setViewMode('section')}
         >
-          <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
-          <Text style={styles.fetchButtonText}>Search</Text>
+          <MaterialIcons 
+            name="class" 
+            size={18} 
+            color={viewMode === 'section' ? '#6366f1' : (isDark ? '#999' : '#666')} 
+          />
+          <Text style={[
+            styles.viewModeText,
+            viewMode === 'section' && styles.viewModeTextActive,
+            isDark && styles.viewModeTextDark,
+          ]}>
+            Classe
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.viewModeButton,
+            viewMode === 'all' && styles.viewModeButtonActive,
+            isDark && styles.viewModeButtonDark,
+          ]}
+          onPress={() => setViewMode('all')}
+        >
+          <MaterialIcons 
+            name="view-list" 
+            size={18} 
+            color={viewMode === 'all' ? '#6366f1' : (isDark ? '#999' : '#666')} 
+          />
+          <Text style={[
+            styles.viewModeText,
+            viewMode === 'all' && styles.viewModeTextActive,
+            isDark && styles.viewModeTextDark,
+          ]}>
+            Tutti
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {savedSections.length > 0 && (
+      {viewMode === 'section' && (
+        <View style={searchContainerStyle}>
+          <View style={styles.inputWrapper}>
+            <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Classe</Text>
+            <TextInput
+              style={inputStyle}
+              value={section}
+              onChangeText={setSection}
+              placeholder="Inserisci classe (es. 3B)"
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              autoCorrect={false}
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.fetchButton}
+            onPress={() => fetchEvents()}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
+            <Text style={styles.fetchButtonText}>Cerca</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {viewMode === 'section' && savedSections.length > 0 && (
         <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
           <ScrollView 
             horizontal 
@@ -274,10 +385,7 @@ export default function App() {
                   section === sec && styles.quickButtonActive,
                   isDark && section !== sec && styles.quickButtonDark,
                 ]}
-                onPress={() => {
-                  setSection(sec);
-                  setTimeout(() => fetchEvents(), 100);
-                }}
+                onPress={() => handleQuickSectionSelect(sec)}
                 activeOpacity={0.7}
               >
                 <Text style={[
@@ -292,6 +400,52 @@ export default function App() {
           </ScrollView>
         </View>
       )}
+
+      {/* Date Filter */}
+      <View style={[styles.dateFilterContainer, isDark && styles.dateFilterContainerDark]}>
+        <TouchableOpacity
+          style={[
+            styles.dateFilterButton,
+            dateFilter === 'today' && styles.dateFilterButtonActive,
+            isDark && styles.dateFilterButtonDark,
+          ]}
+          onPress={() => setDateFilter('today')}
+        >
+          <MaterialIcons 
+            name="today" 
+            size={18} 
+            color={dateFilter === 'today' ? '#6366f1' : (isDark ? '#999' : '#666')} 
+          />
+          <Text style={[
+            styles.dateFilterText,
+            dateFilter === 'today' && styles.dateFilterTextActive,
+            isDark && styles.dateFilterTextDark,
+          ]}>
+            Oggi
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.dateFilterButton,
+            dateFilter === 'tomorrow' && styles.dateFilterButtonActive,
+            isDark && styles.dateFilterButtonDark,
+          ]}
+          onPress={() => setDateFilter('tomorrow')}
+        >
+          <MaterialIcons 
+            name="event" 
+            size={18} 
+            color={dateFilter === 'tomorrow' ? '#6366f1' : (isDark ? '#999' : '#666')} 
+          />
+          <Text style={[
+            styles.dateFilterText,
+            dateFilter === 'tomorrow' && styles.dateFilterTextActive,
+            isDark && styles.dateFilterTextDark,
+          ]}>
+            Domani
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <Animated.View
         style={[
@@ -320,7 +474,7 @@ export default function App() {
         ) : (
           <FlatList
             data={events}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
             renderItem={({ item, index }) => (
               <EventCard item={item} index={index} isDark={isDark} />
             )}
@@ -347,7 +501,7 @@ export default function App() {
         <View style={styles.modalOverlay}>
           <View style={modalStyle}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Settings</Text>
+              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Impostazioni</Text>
               <TouchableOpacity onPress={() => setShowSettings(false)}>
                 <MaterialIcons name="close" size={28} color={isDark ? '#999' : '#666'} />
               </TouchableOpacity>
@@ -360,7 +514,7 @@ export default function App() {
                   <View style={styles.settingTextContainer}>
                     <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Dark Mode</Text>
                     <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>
-                      Toggle dark theme
+                      Applica tema scuro
                     </Text>
                   </View>
                 </View>
@@ -378,10 +532,10 @@ export default function App() {
                 <MaterialIcons name="bookmark" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
                 <View style={styles.sectionHeaderText}>
                   <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                    Saved Sections
+                    Classi salvate
                   </Text>
                   <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>
-                    Quick access to your favorite sections
+                    Accesso rapido alle tue classi preferite
                   </Text>
                 </View>
               </View>
@@ -406,7 +560,7 @@ export default function App() {
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
-                <Text style={styles.addSectionText}>Add Current Section</Text>
+                <Text style={styles.addSectionText}>Aggiungi classe corrente</Text>
               </TouchableOpacity>
 
               <View style={[styles.separator, isDark && styles.separatorDark]} />
@@ -420,13 +574,13 @@ export default function App() {
                 </View>
               </View>
               <Text style={[styles.aboutText, isDark && styles.aboutTextDark]}>
-                School Schedule Variations App
+                FermiToday
               </Text>
               <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
-                View daily schedule variations for your section. Simply enter your class section to see any changes to today's schedule.
+                Visualizza le variazioni dell'orario giornaliero della tua classe. Basta inserire la tua classe per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 1.0.0
+                Version 0.1.0
               </Text>
             </ScrollView>
           </View>
@@ -488,6 +642,47 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 4,
     fontWeight: '500',
+  },
+  viewModeContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  viewModeContainerDark: {
+    backgroundColor: '#1a1a1a',
+    borderBottomColor: '#2a2a2a',
+  },
+  viewModeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f5f5f7',
+    gap: 8,
+  },
+  viewModeButtonDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  viewModeButtonActive: {
+    backgroundColor: '#e0e7ff',
+  },
+  viewModeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  viewModeTextDark: {
+    color: '#999',
+  },
+  viewModeTextActive: {
+    color: '#6366f1',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -598,6 +793,47 @@ const styles = StyleSheet.create({
   },
   quickButtonTextActive: {
     color: '#fff',
+  },
+  dateFilterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  dateFilterContainerDark: {
+    backgroundColor: '#1a1a1a',
+    borderBottomColor: '#2a2a2a',
+  },
+  dateFilterButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f5f5f7',
+    gap: 8,
+  },
+  dateFilterButtonDark: {
+    backgroundColor: '#2a2a2a',
+  },
+  dateFilterButtonActive: {
+    backgroundColor: '#e0e7ff',
+  },
+  dateFilterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dateFilterTextDark: {
+    color: '#999',
+  },
+  dateFilterTextActive: {
+    color: '#6366f1',
   },
   content: {
     flex: 1,
