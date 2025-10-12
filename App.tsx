@@ -20,7 +20,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import axios from 'axios';
 
-const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || 'http://localhost:3000';
+const BACKEND_URL = 'https://recent-koi-schedule-95baddf4.koyeb.app';
 
 type Event = {
   id: string;
@@ -30,16 +30,23 @@ type Event = {
   end: string;
 };
 
-const EventCard = ({ item, index, isDark }: { item: Event; index: number; isDark: boolean }) => {
+const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: number; isDark: boolean }) => {
   const animValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(animValue, {
+    const animation = Animated.timing(animValue, {
       toValue: 1,
       duration: 400,
       delay: index * 100,
       useNativeDriver: true,
-    }).start();
+    });
+    
+    animation.start();
+
+    // Cleanup: Stop animation if component unmounts
+    return () => {
+      animation.stop();
+    };
   }, []);
 
   const cardStyle = isDark ? styles.eventCardDark : styles.eventCard;
@@ -90,7 +97,7 @@ const EventCard = ({ item, index, isDark }: { item: Event; index: number; isDark
       </View>
     </Animated.View>
   );
-};
+});
 
 export default function App() {
   const [section, setSection] = useState('');
@@ -142,7 +149,7 @@ export default function App() {
     }
   };
 
-  const fetchEvents = async (isRefresh = false, targetSection?: string, targetDate?: 'today' | 'tomorrow') => {
+  const fetchEvents = React.useCallback(async (isRefresh = false, targetSection?: string, targetDate?: 'today' | 'tomorrow') => {
     // Dismiss keyboard when searching
     Keyboard.dismiss();
     
@@ -151,7 +158,7 @@ export default function App() {
     const dateToFetch = targetDate || dateFilter;
 
     if (viewMode === 'section' && !sectionToFetch.trim()) {
-      alert('Please enter a section');
+      alert('Inserisci una classe');
       return;
     }
 
@@ -174,6 +181,10 @@ export default function App() {
         // Fetch all events for the day
         res = await axios.get(`${BACKEND_URL}/events`, {
           params: { date: dateStr },
+          timeout: 30000, // 30 seconds timeout
+          headers: {
+            'Accept': 'application/json',
+          },
         });
       } else {
         // Fetch events for specific section
@@ -182,10 +193,12 @@ export default function App() {
             section: sectionToFetch,
             date: dateStr
           },
+          timeout: 30000, // 30 seconds timeout
+          headers: {
+            'Accept': 'application/json',
+          },
         });
       }
-
-      setEvents(res.data);
 
       // Filter events to only show the requested day
       const filteredEvents = res.data.filter((event: Event) => {
@@ -213,14 +226,33 @@ export default function App() {
           useNativeDriver: true,
         }),
       ]).start();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to fetch events.');
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      
+      let errorMessage = 'Impossibile caricare le variazioni.';
+      
+      if (err.code === 'ECONNABORTED') {
+        errorMessage = 'Richiesta scaduta. Controlla la connessione e riprova.';
+      } else if (err.response) {
+        // Server responded with error
+        if (err.response.status === 503) {
+          errorMessage = 'Server in caricamento. Riprova tra 30 secondi.';
+        } else if (err.response.status >= 500) {
+          errorMessage = 'Errore del server. Riprova più tardi.';
+        } else if (err.response.status === 404) {
+          errorMessage = 'Nessuna variazione trovata.';
+        }
+      } else if (err.request) {
+        // Request made but no response
+        errorMessage = 'Nessuna connessione al server. Controlla la tua connessione internet.';
+      }
+      
+      alert(errorMessage);
     }
 
     setLoading(false);
     setRefreshing(false);
-  };
+  }, [section, dateFilter, viewMode]);
 
   const onRefresh = () => {
     fetchEvents(true);
@@ -242,7 +274,8 @@ export default function App() {
     setSection(sec);
     setViewMode('section');
     // Fetch immediately with the selected section
-    setTimeout(() => fetchEvents(false, sec, dateFilter), 50);
+    const timer = setTimeout(() => fetchEvents(false, sec, dateFilter), 50);
+    return () => clearTimeout(timer);
   };
 
   // Fetch when date filter or view mode changes
@@ -271,11 +304,11 @@ export default function App() {
   const emptyTextStyle = isDark ? styles.emptyTextDark : styles.emptyText;
   const modalStyle = isDark ? styles.modalContentDark : styles.modalContent;
 
-  const getSubtitle = () => {
+  const getSubtitle = React.useMemo(() => {
     const dateText = dateFilter === 'today' ? 'Today' : 'Tomorrow';
     const modeText = viewMode === 'all' ? 'All Sections' : section || 'Select Section';
     return `${dateText} - ${modeText}`;
-  };
+  }, [dateFilter, viewMode, section]);
 
   return (
     <SafeAreaView style={containerStyle} edges={['top', 'left', 'right']}>
@@ -288,7 +321,7 @@ export default function App() {
         <View style={styles.headerTop}>
           <View>
             <Text style={titleStyle}>Variazioni</Text>
-            <Text style={subtitleStyle}>{getSubtitle()}</Text>
+            <Text style={subtitleStyle}>{getSubtitle}</Text>
           </View>
           <TouchableOpacity
             style={styles.settingsButton}
@@ -354,7 +387,7 @@ export default function App() {
               style={inputStyle}
               value={section}
               onChangeText={setSection}
-              placeholder="Inserisci classe (es. 3B)"
+              placeholder="es. 3A, 5AIIN..."
               placeholderTextColor={isDark ? '#666' : '#999'}
               autoCorrect={false}
             />
@@ -512,7 +545,7 @@ export default function App() {
                 <View style={styles.settingLeft}>
                   <MaterialIcons name="dark-mode" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
                   <View style={styles.settingTextContainer}>
-                    <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Dark Mode</Text>
+                    <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Tema scuro</Text>
                     <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>
                       Applica tema scuro
                     </Text>
@@ -580,7 +613,7 @@ export default function App() {
                 Visualizza le variazioni dell'orario giornaliero della tua classe. Basta inserire la tua classe per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 0.1.0
+                Version 0.2.0
               </Text>
             </ScrollView>
           </View>
