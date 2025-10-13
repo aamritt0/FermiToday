@@ -20,7 +20,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import axios from 'axios';
 
-const BACKEND_URL = 'https://recent-koi-schedule-95baddf4.koyeb.app';
+const BACKEND_URL = 'https://recent-koi-schedule-95baddf4.koyeb.app'; 
 
 type Event = {
   id: string;
@@ -83,14 +83,16 @@ const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: num
         <View style={timeContainerStyle}>
           <MaterialIcons name="schedule" size={16} color={iconColor} style={styles.timeIcon} />
           <Text style={timeTextStyle}>
-            {new Date(item.start).toLocaleTimeString('en-US', {
+            {new Date(item.start).toLocaleTimeString('it-IT', {
               hour: '2-digit',
               minute: '2-digit',
+              timeZone: 'Europe/Rome',
             })}{' '}
             -{' '}
-            {new Date(item.end).toLocaleTimeString('en-US', {
+            {new Date(item.end).toLocaleTimeString('it-IT', {
               hour: '2-digit',
               minute: '2-digit',
+              timeZone: 'Europe/Rome',
             })}
           </Text>
         </View>
@@ -109,9 +111,29 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [dateFilter, setDateFilter] = useState<'today' | 'tomorrow'>('today');
   const [viewMode, setViewMode] = useState<'section' | 'all'>('section');
+  const [notification, setNotification] = useState<{ message: string; type: 'error' | 'info' } | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const notificationAnim = useRef(new Animated.Value(0)).current;
+
+  const showNotification = (message: string, type: 'error' | 'info' = 'error') => {
+    setNotification({ message, type });
+    
+    Animated.sequence([
+      Animated.timing(notificationAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(3000),
+      Animated.timing(notificationAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setNotification(null));
+  };
 
   // Load settings from AsyncStorage
   useEffect(() => {
@@ -158,7 +180,7 @@ export default function App() {
     const dateToFetch = targetDate || dateFilter;
 
     if (viewMode === 'section' && !sectionToFetch.trim()) {
-      alert('Inserisci una classe');
+      showNotification('Inserisci una classe', 'info');
       return;
     }
 
@@ -247,7 +269,7 @@ export default function App() {
         errorMessage = 'Nessuna connessione al server. Controlla la tua connessione internet.';
       }
       
-      alert(errorMessage);
+      showNotification(errorMessage, 'error');
     }
 
     setLoading(false);
@@ -387,7 +409,7 @@ export default function App() {
               style={inputStyle}
               value={section}
               onChangeText={setSection}
-              placeholder="es. 3A, 5AIIN..."
+              placeholder="es. 5AIIN, 3B..."
               placeholderTextColor={isDark ? '#666' : '#999'}
               autoCorrect={false}
             />
@@ -499,9 +521,9 @@ export default function App() {
         ) : events.length === 0 ? (
           <View style={styles.centerContainer}>
             <MaterialIcons name="event-available" size={64} color={isDark ? '#666' : '#999'} />
-            <Text style={emptyTitleStyle}>All Clear!</Text>
+            <Text style={emptyTitleStyle}>Tutto a posto!</Text>
             <Text style={emptyTextStyle}>
-              No schedule variations found
+              Nessuna variazione trovata per {viewMode === 'all' ? 'oggi' : section || 'la tua classe'}.
             </Text>
           </View>
         ) : (
@@ -610,15 +632,41 @@ export default function App() {
                 FermiToday
               </Text>
               <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
-                Visualizza le variazioni dell'orario giornaliero della tua classe. Basta inserire la tua classe per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
+                Visualizza le variazioni dell'orario giornaliero della tua classe o quella dei tuoi amici.{"\n"}Basta inserire la classe per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 0.2.0
+                Version 0.2.5
               </Text>
             </ScrollView>
           </View>
         </View>
       </Modal>
+
+      {/* Custom Notification */}
+      {notification && (
+        <Animated.View
+          style={[
+            styles.notification,
+            notification.type === 'error' ? styles.notificationError : styles.notificationInfo,
+            {
+              opacity: notificationAnim,
+              transform: [{
+                translateY: notificationAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-100, 0],
+                }),
+              }],
+            },
+          ]}
+        >
+          <MaterialIcons 
+            name={notification.type === 'error' ? 'error-outline' : 'info-outline'} 
+            size={24} 
+            color="#fff" 
+          />
+          <Text style={styles.notificationText}>{notification.message}</Text>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1175,5 +1223,34 @@ const styles = StyleSheet.create({
   },
   aboutVersionDark: {
     color: '#666',
+  },
+  notification: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    gap: 12,
+    zIndex: 9999,
+  },
+  notificationError: {
+    backgroundColor: '#ef4444',
+  },
+  notificationInfo: {
+    backgroundColor: '#6366f1',
+  },
+  notificationText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
