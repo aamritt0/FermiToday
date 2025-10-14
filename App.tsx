@@ -640,7 +640,7 @@ export default function App() {
                 Visualizza le variazioni dell'orario giornaliero della tua classe o quella dei tuoi amici.{"\n"}Basta inserire la classe per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 0.2.5
+                Version 0.3.0
               </Text>
             </ScrollView>
           </View>
