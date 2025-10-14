@@ -30,6 +30,21 @@ type Event = {
   end: string;
 };
 
+// Helper function to extract class from event summary
+const extractClassFromSummary = (summary: string): string | null => {
+  const classMatch = summary.match(/CLASSE\s+([A-Z0-9]+)\s/);
+  return classMatch ? classMatch[1] : null;
+};
+
+// Helper function to filter events by class
+const filterEventsByClass = (events: Event[], classCode: string): Event[] => {
+  const upperClassCode = classCode.toUpperCase().trim();
+  return events.filter(event => {
+    const extractedClass = extractClassFromSummary(event.summary);
+    return extractedClass === upperClassCode;
+  });
+};
+
 const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: number; isDark: boolean }) => {
   const animValue = useRef(new Animated.Value(0)).current;
 
@@ -43,7 +58,6 @@ const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: num
     
     animation.start();
 
-    // Cleanup: Stop animation if component unmounts
     return () => {
       animation.stop();
     };
@@ -135,12 +149,10 @@ export default function App() {
     ]).start(() => setNotification(null));
   };
 
-  // Load settings from AsyncStorage
   useEffect(() => {
     loadSettings();
   }, []);
 
-  // Save settings whenever they change
   useEffect(() => {
     saveSettings();
   }, [isDark, savedSections]);
@@ -172,10 +184,8 @@ export default function App() {
   };
 
   const fetchEvents = React.useCallback(async (isRefresh = false, targetSection?: string, targetDate?: 'today' | 'tomorrow') => {
-    // Dismiss keyboard when searching
     Keyboard.dismiss();
     
-    // Convert section to uppercase for the request
     const sectionToFetch = (targetSection || section).toUpperCase();
     const dateToFetch = targetDate || dateFilter;
 
@@ -191,7 +201,6 @@ export default function App() {
     }
 
     try {
-      // Calculate date
       const today = new Date();
       const targetDateObj = dateToFetch === 'tomorrow' 
         ? new Date(today.getTime() + 24 * 60 * 60 * 1000)
@@ -200,22 +209,20 @@ export default function App() {
 
       let res;
       if (viewMode === 'all') {
-        // Fetch all events for the day
         res = await axios.get(`${BACKEND_URL}/events`, {
           params: { date: dateStr },
-          timeout: 30000, // 30 seconds timeout
+          timeout: 30000,
           headers: {
             'Accept': 'application/json',
           },
         });
       } else {
-        // Fetch events for specific section
         res = await axios.get(`${BACKEND_URL}/events`, {
           params: { 
             section: sectionToFetch,
             date: dateStr
           },
-          timeout: 30000, // 30 seconds timeout
+          timeout: 30000,
           headers: {
             'Accept': 'application/json',
           },
@@ -223,10 +230,15 @@ export default function App() {
       }
 
       // Filter events to only show the requested day
-      const filteredEvents = res.data.filter((event: Event) => {
+      let filteredEvents = res.data.filter((event: Event) => {
         const eventDate = new Date(event.start).toISOString().split('T')[0];
         return eventDate === dateStr;
       });
+
+      // If in section mode, apply exact class matching filter
+      if (viewMode === 'section') {
+        filteredEvents = filterEventsByClass(filteredEvents, sectionToFetch);
+      }
 
       // Sort events by start time
       const sortedEvents = [...filteredEvents].sort((a, b) => {
@@ -256,7 +268,6 @@ export default function App() {
       if (err.code === 'ECONNABORTED') {
         errorMessage = 'Richiesta scaduta. Controlla la connessione e riprova.';
       } else if (err.response) {
-        // Server responded with error
         if (err.response.status === 503) {
           errorMessage = 'Server in caricamento. Riprova tra 30 secondi.';
         } else if (err.response.status >= 500) {
@@ -265,7 +276,6 @@ export default function App() {
           errorMessage = 'Nessuna variazione trovata.';
         }
       } else if (err.request) {
-        // Request made but no response
         errorMessage = 'Nessuna connessione al server. Controlla la tua connessione internet.';
       }
       
@@ -295,17 +305,14 @@ export default function App() {
     Keyboard.dismiss();
     setSection(sec);
     setViewMode('section');
-    // Fetch immediately with the selected section
     const timer = setTimeout(() => fetchEvents(false, sec, dateFilter), 50);
     return () => clearTimeout(timer);
   };
 
-  // Fetch when date filter or view mode changes
   useEffect(() => {
     if (viewMode === 'all') {
       fetchEvents();
     } else if (viewMode === 'section') {
-      // Clear events when switching to section mode without a section selected
       if (!section.trim()) {
         setEvents([]);
         fadeAnim.setValue(0);
@@ -355,7 +362,6 @@ export default function App() {
         </View>
       </View>
 
-      {/* View Mode Selector */}
       <View style={[styles.viewModeContainer, isDark && styles.viewModeContainerDark]}>
         <TouchableOpacity
           style={[
@@ -456,7 +462,6 @@ export default function App() {
         </View>
       )}
 
-      {/* Date Filter */}
       <View style={[styles.dateFilterContainer, isDark && styles.dateFilterContainerDark]}>
         <TouchableOpacity
           style={[
@@ -642,7 +647,6 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* Custom Notification */}
       {notification && (
         <Animated.View
           style={[
@@ -671,6 +675,7 @@ export default function App() {
   );
 }
 
+// Styles remain unchanged...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
