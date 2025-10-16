@@ -37,10 +37,22 @@ const extractClassFromSummary = (summary: string): string | null => {
 };
 
 // Helper function to extract professor name from event summary
-const extractProfessorFromSummary = (summary: string): string | null => {
-  // Match PROF. or PROF.ssa followed by name (one or more words)
-  const profMatch = summary.match(/PROF\.(?:ssa)?\s+([A-Z]+(?:\s+[A-Z]+)*)/i);
-  return profMatch ? profMatch[1].trim() : null;
+const extractProfessorFromSummary = (summary: string): string[] => {
+  // Match all instances of PROF. or PROF.ssa followed by name
+  // This regex looks for PROF or PROF.ssa, optional spaces/dots, then captures uppercase letters/spaces until a non-letter character
+  const profMatches = [...summary.matchAll(/PROF\.?(?:ssa)?\.?\s*([A-Z][A-Z\s]+?)(?=\s*[\(\),]|\s+ASSENTE|\s+CLASSE|\s*$)/gi)];
+  const professors: string[] = [];
+  
+  for (const match of profMatches) {
+    if (match[1]) {
+      const profName = match[1].trim().replace(/\s+/g, ' ');
+      if (profName.length > 0) {
+        professors.push(profName);
+      }
+    }
+  }
+  
+  return professors;
 };
 
 // Helper function to filter events by class
@@ -56,13 +68,11 @@ const filterEventsByClass = (events: Event[], classCode: string): Event[] => {
 const filterEventsByProfessor = (events: Event[], professorName: string): Event[] => {
   const upperProfName = professorName.toUpperCase().trim();
   return events.filter(event => {
-    const extractedProf = extractProfessorFromSummary(event.summary);
-    if (!extractedProf) return false;
+    const extractedProfs = extractProfessorFromSummary(event.summary);
+    if (extractedProfs.length === 0) return false;
     
-    const extractedProfUpper = extractedProf.toUpperCase();
-    
-    // Exact match: the search term must equal the extracted professor name
-    return extractedProfUpper === upperProfName;
+    // Check if any of the extracted professor names match exactly
+    return extractedProfs.some(prof => prof.toUpperCase() === upperProfName);
   });
 };
 
@@ -70,19 +80,13 @@ const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: num
   const animValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animation = Animated.timing(animValue, {
+    Animated.timing(animValue, {
       toValue: 1,
       duration: 400,
       delay: index * 100,
       useNativeDriver: true,
-    });
-    
-    animation.start();
-
-    return () => {
-      animation.stop();
-    };
-  }, []);
+    }).start();
+  }, [index]);
 
   const cardStyle = isDark ? styles.eventCardDark : styles.eventCard;
   const summaryStyle = isDark ? styles.summaryDark : styles.summary;
@@ -242,36 +246,19 @@ export default function App() {
         : today;
       const dateStr = targetDateObj.toISOString().split('T')[0];
 
-      let res;
-      if (viewMode === 'all') {
-        res = await axios.get(`${BACKEND_URL}/events`, {
-          params: { date: dateStr },
-          timeout: 30000,
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
-      } else if (viewMode === 'professor') {
-        // Fetch all events for the day, then filter by professor
-        res = await axios.get(`${BACKEND_URL}/events`, {
-          params: { date: dateStr },
-          timeout: 30000,
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
-      } else {
-        res = await axios.get(`${BACKEND_URL}/events`, {
-          params: { 
-            section: sectionToFetch,
-            date: dateStr
-          },
-          timeout: 30000,
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
+      const params: any = { date: dateStr };
+      
+      if (viewMode === 'section') {
+        params.section = sectionToFetch;
       }
+
+      const res = await axios.get(`${BACKEND_URL}/events`, {
+        params,
+        timeout: 30000,
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
 
       // Filter events to only show the requested day
       let filteredEvents = res.data.filter((event: Event) => {
@@ -287,11 +274,9 @@ export default function App() {
       }
 
       // Sort events by start time
-      const sortedEvents = [...filteredEvents].sort((a, b) => {
-        return new Date(a.start).getTime() - new Date(b.start).getTime();
-      });
+      filteredEvents.sort((a: Event, b: Event) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
-      setEvents(sortedEvents);
+      setEvents(filteredEvents);
 
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -326,11 +311,11 @@ export default function App() {
       }
       
       showNotification(errorMessage, 'error');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    setLoading(false);
-    setRefreshing(false);
-  }, [section, professor, dateFilter, viewMode]);
+  }, [section, professor, dateFilter, viewMode, fadeAnim, slideAnim]);
 
   const onRefresh = () => {
     fetchEvents(true);
@@ -362,16 +347,14 @@ export default function App() {
     Keyboard.dismiss();
     setSection(sec);
     setViewMode('section');
-    const timer = setTimeout(() => fetchEvents(false, sec, undefined, dateFilter), 50);
-    return () => clearTimeout(timer);
+    setTimeout(() => fetchEvents(false, sec, undefined, dateFilter), 50);
   };
 
   const handleQuickProfessorSelect = (prof: string) => {
     Keyboard.dismiss();
     setProfessor(prof);
     setViewMode('professor');
-    const timer = setTimeout(() => fetchEvents(false, undefined, prof, dateFilter), 50);
-    return () => clearTimeout(timer);
+    setTimeout(() => fetchEvents(false, undefined, prof, dateFilter), 50);
   };
 
   useEffect(() => {
@@ -719,7 +702,8 @@ export default function App() {
         onRequestClose={() => setShowSettings(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={modalStyle}>
+          <SafeAreaView style={styles.modalSafeArea} edges={['bottom']}>
+            <View style={modalStyle}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Impostazioni</Text>
               <TouchableOpacity onPress={() => setShowSettings(false)}>
@@ -841,6 +825,7 @@ export default function App() {
               </Text>
             </ScrollView>
           </View>
+          </SafeAreaView>
         </View>
       </Modal>
 
@@ -1263,19 +1248,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
+  modalSafeArea: {
+    backgroundColor: 'transparent',
+  },
   modalContent: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '80%',
+    paddingBottom: 0,
+    maxHeight: '90%',
   },
   modalContentDark: {
     backgroundColor: '#1a1a1a',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '80%',
+    paddingBottom: 0,
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
