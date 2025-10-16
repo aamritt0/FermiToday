@@ -518,12 +518,12 @@ export default function App() {
       {viewMode === 'professor' && (
         <View style={searchContainerStyle}>
           <View style={styles.inputWrapper}>
-            <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Professore</Text>
+            <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Prof.</Text>
             <TextInput
               style={inputStyle}
               value={professor}
               onChangeText={setProfessor}
-              placeholder="es. ROSSI, BIANCHI..."
+              placeholder="es. ROSSI"
               placeholderTextColor={isDark ? '#666' : '#999'}
               autoCorrect={false}
             />
@@ -702,8 +702,7 @@ export default function App() {
         onRequestClose={() => setShowSettings(false)}
       >
         <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalSafeArea} edges={['bottom']}>
-            <View style={modalStyle}>
+          <View style={modalStyle}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Impostazioni</Text>
               <TouchableOpacity onPress={() => setShowSettings(false)}>
@@ -711,7 +710,7 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollViewContent}>
               <View style={styles.settingRow}>
                 <View style={styles.settingLeft}>
                   <MaterialIcons name="dark-mode" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
@@ -773,10 +772,10 @@ export default function App() {
                 <MaterialIcons name="person" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
                 <View style={styles.sectionHeaderText}>
                   <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                    Professori salvati
+                    Prof. salvati
                   </Text>
                   <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>
-                    Accesso rapido ai tuoi professori preferiti
+                    Accesso rapido per i prof.
                   </Text>
                 </View>
               </View>
@@ -801,7 +800,7 @@ export default function App() {
                 activeOpacity={0.8}
               >
                 <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
-                <Text style={styles.addSectionText}>Aggiungi professore corrente</Text>
+                <Text style={styles.addSectionText}>Aggiungi prof. corrente</Text>
               </TouchableOpacity>
 
               <View style={[styles.separator, isDark && styles.separatorDark]} />
@@ -825,7 +824,6 @@ export default function App() {
               </Text>
             </ScrollView>
           </View>
-          </SafeAreaView>
         </View>
       </Modal>
 
@@ -1248,24 +1246,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  modalSafeArea: {
-    backgroundColor: 'transparent',
-  },
   modalContent: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    paddingTop: 24,
+    paddingHorizontal: 24,
     paddingBottom: 0,
     maxHeight: '90%',
+    minHeight: '90%',
   },
   modalContentDark: {
     backgroundColor: '#1a1a1a',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    paddingTop: 24,
+    paddingHorizontal: 24,
     paddingBottom: 0,
     maxHeight: '90%',
+    minHeight: '90%',
+  },
+  scrollViewContent: {
+    paddingBottom: 60,
   },
   modalHeader: {
     flexDirection: 'row',
