@@ -36,12 +36,33 @@ const extractClassFromSummary = (summary: string): string | null => {
   return classMatch ? classMatch[1] : null;
 };
 
+// Helper function to extract professor name from event summary
+const extractProfessorFromSummary = (summary: string): string | null => {
+  // Match PROF. or PROF.ssa followed by name (one or more words)
+  const profMatch = summary.match(/PROF\.(?:ssa)?\s+([A-Z]+(?:\s+[A-Z]+)*)/i);
+  return profMatch ? profMatch[1].trim() : null;
+};
+
 // Helper function to filter events by class
 const filterEventsByClass = (events: Event[], classCode: string): Event[] => {
   const upperClassCode = classCode.toUpperCase().trim();
   return events.filter(event => {
     const extractedClass = extractClassFromSummary(event.summary);
     return extractedClass === upperClassCode;
+  });
+};
+
+// Helper function to filter events by professor
+const filterEventsByProfessor = (events: Event[], professorName: string): Event[] => {
+  const upperProfName = professorName.toUpperCase().trim();
+  return events.filter(event => {
+    const extractedProf = extractProfessorFromSummary(event.summary);
+    if (!extractedProf) return false;
+    
+    const extractedProfUpper = extractedProf.toUpperCase();
+    
+    // Exact match: the search term must equal the extracted professor name
+    return extractedProfUpper === upperProfName;
   });
 };
 
@@ -117,14 +138,16 @@ const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: num
 
 export default function App() {
   const [section, setSection] = useState('');
+  const [professor, setProfessor] = useState('');
   const [savedSections, setSavedSections] = useState<string[]>([]);
+  const [savedProfessors, setSavedProfessors] = useState<string[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [dateFilter, setDateFilter] = useState<'today' | 'tomorrow'>('today');
-  const [viewMode, setViewMode] = useState<'section' | 'all'>('section');
+  const [viewMode, setViewMode] = useState<'section' | 'professor' | 'all'>('section');
   const [notification, setNotification] = useState<{ message: string; type: 'error' | 'info' } | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -155,12 +178,13 @@ export default function App() {
 
   useEffect(() => {
     saveSettings();
-  }, [isDark, savedSections]);
+  }, [isDark, savedSections, savedProfessors]);
 
   const loadSettings = async () => {
     try {
       const darkMode = await AsyncStorage.getItem('darkMode');
       const sections = await AsyncStorage.getItem('savedSections');
+      const professors = await AsyncStorage.getItem('savedProfessors');
       
       if (darkMode !== null) {
         setIsDark(JSON.parse(darkMode));
@@ -168,6 +192,10 @@ export default function App() {
       
       if (sections !== null) {
         setSavedSections(JSON.parse(sections));
+      }
+
+      if (professors !== null) {
+        setSavedProfessors(JSON.parse(professors));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -178,19 +206,26 @@ export default function App() {
     try {
       await AsyncStorage.setItem('darkMode', JSON.stringify(isDark));
       await AsyncStorage.setItem('savedSections', JSON.stringify(savedSections));
+      await AsyncStorage.setItem('savedProfessors', JSON.stringify(savedProfessors));
     } catch (error) {
       console.error('Error saving settings:', error);
     }
   };
 
-  const fetchEvents = React.useCallback(async (isRefresh = false, targetSection?: string, targetDate?: 'today' | 'tomorrow') => {
+  const fetchEvents = React.useCallback(async (isRefresh = false, targetSection?: string, targetProfessor?: string, targetDate?: 'today' | 'tomorrow') => {
     Keyboard.dismiss();
     
     const sectionToFetch = (targetSection || section).toUpperCase();
+    const professorToFetch = (targetProfessor || professor).toUpperCase();
     const dateToFetch = targetDate || dateFilter;
 
     if (viewMode === 'section' && !sectionToFetch.trim()) {
       showNotification('Inserisci una classe', 'info');
+      return;
+    }
+
+    if (viewMode === 'professor' && !professorToFetch.trim()) {
+      showNotification('Inserisci un professore', 'info');
       return;
     }
 
@@ -209,6 +244,15 @@ export default function App() {
 
       let res;
       if (viewMode === 'all') {
+        res = await axios.get(`${BACKEND_URL}/events`, {
+          params: { date: dateStr },
+          timeout: 30000,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+      } else if (viewMode === 'professor') {
+        // Fetch all events for the day, then filter by professor
         res = await axios.get(`${BACKEND_URL}/events`, {
           params: { date: dateStr },
           timeout: 30000,
@@ -235,9 +279,11 @@ export default function App() {
         return eventDate === dateStr;
       });
 
-      // If in section mode, apply exact class matching filter
+      // Apply mode-specific filters
       if (viewMode === 'section') {
         filteredEvents = filterEventsByClass(filteredEvents, sectionToFetch);
+      } else if (viewMode === 'professor') {
+        filteredEvents = filterEventsByProfessor(filteredEvents, professorToFetch);
       }
 
       // Sort events by start time
@@ -284,7 +330,7 @@ export default function App() {
 
     setLoading(false);
     setRefreshing(false);
-  }, [section, dateFilter, viewMode]);
+  }, [section, professor, dateFilter, viewMode]);
 
   const onRefresh = () => {
     fetchEvents(true);
@@ -301,11 +347,30 @@ export default function App() {
     setSavedSections(savedSections.filter(s => s !== sectionToRemove));
   };
 
+  const addProfessor = () => {
+    const trimmedProfessor = professor.trim().toUpperCase();
+    if (trimmedProfessor && !savedProfessors.includes(trimmedProfessor)) {
+      setSavedProfessors([...savedProfessors, trimmedProfessor]);
+    }
+  };
+
+  const removeProfessor = (professorToRemove: string) => {
+    setSavedProfessors(savedProfessors.filter(p => p !== professorToRemove));
+  };
+
   const handleQuickSectionSelect = (sec: string) => {
     Keyboard.dismiss();
     setSection(sec);
     setViewMode('section');
-    const timer = setTimeout(() => fetchEvents(false, sec, dateFilter), 50);
+    const timer = setTimeout(() => fetchEvents(false, sec, undefined, dateFilter), 50);
+    return () => clearTimeout(timer);
+  };
+
+  const handleQuickProfessorSelect = (prof: string) => {
+    Keyboard.dismiss();
+    setProfessor(prof);
+    setViewMode('professor');
+    const timer = setTimeout(() => fetchEvents(false, undefined, prof, dateFilter), 50);
     return () => clearTimeout(timer);
   };
 
@@ -314,6 +379,14 @@ export default function App() {
       fetchEvents();
     } else if (viewMode === 'section') {
       if (!section.trim()) {
+        setEvents([]);
+        fadeAnim.setValue(0);
+        slideAnim.setValue(50);
+      } else {
+        fetchEvents();
+      }
+    } else if (viewMode === 'professor') {
+      if (!professor.trim()) {
         setEvents([]);
         fadeAnim.setValue(0);
         slideAnim.setValue(50);
@@ -335,9 +408,16 @@ export default function App() {
 
   const getSubtitle = React.useMemo(() => {
     const dateText = dateFilter === 'today' ? 'Today' : 'Tomorrow';
-    const modeText = viewMode === 'all' ? 'All Sections' : section || 'Select Section';
+    let modeText = '';
+    if (viewMode === 'all') {
+      modeText = 'All Sections';
+    } else if (viewMode === 'section') {
+      modeText = section || 'Select Section';
+    } else {
+      modeText = professor || 'Select Professor';
+    }
     return `${dateText} - ${modeText}`;
-  }, [dateFilter, viewMode, section]);
+  }, [dateFilter, viewMode, section, professor]);
 
   return (
     <SafeAreaView style={containerStyle} edges={['top', 'left', 'right']}>
@@ -387,6 +467,27 @@ export default function App() {
         <TouchableOpacity
           style={[
             styles.viewModeButton,
+            viewMode === 'professor' && styles.viewModeButtonActive,
+            isDark && styles.viewModeButtonDark,
+          ]}
+          onPress={() => setViewMode('professor')}
+        >
+          <MaterialIcons 
+            name="person" 
+            size={18} 
+            color={viewMode === 'professor' ? '#6366f1' : (isDark ? '#999' : '#666')} 
+          />
+          <Text style={[
+            styles.viewModeText,
+            viewMode === 'professor' && styles.viewModeTextActive,
+            isDark && styles.viewModeTextDark,
+          ]}>
+            Prof.
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.viewModeButton,
             viewMode === 'all' && styles.viewModeButtonActive,
             isDark && styles.viewModeButtonDark,
           ]}
@@ -431,6 +532,30 @@ export default function App() {
         </View>
       )}
 
+      {viewMode === 'professor' && (
+        <View style={searchContainerStyle}>
+          <View style={styles.inputWrapper}>
+            <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Professore</Text>
+            <TextInput
+              style={inputStyle}
+              value={professor}
+              onChangeText={setProfessor}
+              placeholder="es. ROSSI, BIANCHI..."
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              autoCorrect={false}
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.fetchButton}
+            onPress={() => fetchEvents()}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
+            <Text style={styles.fetchButtonText}>Cerca</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {viewMode === 'section' && savedSections.length > 0 && (
         <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
           <ScrollView 
@@ -455,6 +580,37 @@ export default function App() {
                   isDark && section !== sec && styles.quickButtonTextDark,
                 ]}>
                   {sec}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {viewMode === 'professor' && savedProfessors.length > 0 && (
+        <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickSelectContent}
+          >
+            {savedProfessors.map((prof) => (
+              <TouchableOpacity
+                key={prof}
+                style={[
+                  styles.quickButton,
+                  professor === prof && styles.quickButtonActive,
+                  isDark && professor !== prof && styles.quickButtonDark,
+                ]}
+                onPress={() => handleQuickProfessorSelect(prof)}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  professor === prof && styles.quickButtonTextActive,
+                  isDark && professor !== prof && styles.quickButtonTextDark,
+                ]}>
+                  {prof}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -528,7 +684,11 @@ export default function App() {
             <MaterialIcons name="event-available" size={64} color={isDark ? '#666' : '#999'} />
             <Text style={emptyTitleStyle}>Tutto a posto!</Text>
             <Text style={emptyTextStyle}>
-              Nessuna variazione trovata per {viewMode === 'all' ? 'oggi' : section || 'la tua classe'}.
+              Nessuna variazione trovata per {
+                viewMode === 'all' ? 'oggi' : 
+                viewMode === 'professor' ? (professor || 'il professore') :
+                (section || 'la tua classe')
+              }.
             </Text>
           </View>
         ) : (
@@ -626,6 +786,43 @@ export default function App() {
               <View style={[styles.separator, isDark && styles.separatorDark]} />
 
               <View style={styles.sectionHeader}>
+                <MaterialIcons name="person" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                <View style={styles.sectionHeaderText}>
+                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+                    Professori salvati
+                  </Text>
+                  <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>
+                    Accesso rapido ai tuoi professori preferiti
+                  </Text>
+                </View>
+              </View>
+
+              {savedProfessors.map((prof) => (
+                <View key={prof} style={[styles.savedSectionRow, isDark && styles.savedSectionRowDark]}>
+                  <View style={styles.savedSectionLeft}>
+                    <MaterialIcons name="person" size={20} color={isDark ? '#fff' : '#1a1a1a'} />
+                    <Text style={[styles.savedSectionText, isDark && styles.savedSectionTextDark]}>
+                      {prof}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeProfessor(prof)}>
+                    <MaterialIcons name="delete" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={styles.addSectionButton}
+                onPress={addProfessor}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
+                <Text style={styles.addSectionText}>Aggiungi professore corrente</Text>
+              </TouchableOpacity>
+
+              <View style={[styles.separator, isDark && styles.separatorDark]} />
+
+              <View style={styles.sectionHeader}>
                 <MaterialIcons name="info" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
                 <View style={styles.sectionHeaderText}>
                   <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
@@ -637,10 +834,10 @@ export default function App() {
                 FermiToday
               </Text>
               <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
-                Visualizza le variazioni dell'orario giornaliero della tua classe o quella dei tuoi amici.{"\n"}Basta inserire la classe per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
+                Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 0.3.0
+                Version 0.4.0 
               </Text>
             </ScrollView>
           </View>
@@ -675,7 +872,6 @@ export default function App() {
   );
 }
 
-// Styles remain unchanged...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
