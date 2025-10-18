@@ -20,7 +20,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import axios from 'axios';
 
-const BACKEND_URL = 'https://recent-koi-schedule-95baddf4.koyeb.app'; 
+const BACKEND_URL = 'https://purring-celesta-fermitoday-f00679ea.koyeb.app'; 
 
 type Event = {
   id: string;
