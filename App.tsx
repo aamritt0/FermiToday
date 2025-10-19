@@ -820,7 +820,7 @@ export default function App() {
                 Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 0.4.0 
+                Version 0.5.0 
               </Text>
             </ScrollView>
           </View>
