@@ -28,6 +28,7 @@ type Event = {
   description: string;
   start: string;
   end: string;
+  isAllDay?: boolean;
 };
 
 // Helper function to extract class from event summary
@@ -96,6 +97,35 @@ const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: num
 
   const iconColor = isDark ? '#999' : '#666';
 
+  // Check if this is an all-day event
+  // All-day events from server come as just date strings (YYYY-MM-DD)
+  const isAllDayEvent = item.isAllDay || 
+    (typeof item.start === 'string' && item.start.length === 10 && item.start.includes('-'));
+
+  const formatTime = () => {
+    if (isAllDayEvent) {
+      return 'Tutto il giorno';
+    }
+
+    try {
+      const startTime = new Date(item.start).toLocaleTimeString('it-IT', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Europe/Rome',
+      });
+      
+      const endTime = new Date(item.end).toLocaleTimeString('it-IT', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Europe/Rome',
+      });
+
+      return `${startTime} - ${endTime}`;
+    } catch (error) {
+      return 'Orario non disponibile';
+    }
+  };
+
   return (
     <Animated.View
       style={[
@@ -120,19 +150,14 @@ const EventCard = React.memo(({ item, index, isDark }: { item: Event; index: num
           <Text style={descriptionStyle}>{item.description}</Text>
         ) : null}
         <View style={timeContainerStyle}>
-          <MaterialIcons name="schedule" size={16} color={iconColor} style={styles.timeIcon} />
+          <MaterialIcons 
+            name={isAllDayEvent ? "event" : "schedule"} 
+            size={16} 
+            color={iconColor} 
+            style={styles.timeIcon} 
+          />
           <Text style={timeTextStyle}>
-            {new Date(item.start).toLocaleTimeString('it-IT', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'Europe/Rome',
-            })}{' '}
-            -{' '}
-            {new Date(item.end).toLocaleTimeString('it-IT', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'Europe/Rome',
-            })}
+            {formatTime()}
           </Text>
         </View>
       </View>
