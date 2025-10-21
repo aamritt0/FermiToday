@@ -68,12 +68,31 @@ const filterEventsByClass = (events: Event[], classCode: string): Event[] => {
 // Helper function to filter events by professor
 const filterEventsByProfessor = (events: Event[], professorName: string): Event[] => {
   const upperProfName = professorName.toUpperCase().trim();
+  
   return events.filter(event => {
+    // Attempt to extract professors using the regex from summary
     const extractedProfs = extractProfessorFromSummary(event.summary);
-    if (extractedProfs.length === 0) return false;
     
-    // Check if any of the extracted professor names match exactly
-    return extractedProfs.some(prof => prof.toUpperCase() === upperProfName);
+    // If regex finds professors, check for an exact match
+    if (extractedProfs.length > 0) {
+      const found = extractedProfs.some(prof => prof.toUpperCase() === upperProfName);
+      if (found) return true;
+    }
+    
+    // Fallback: Check if the professor's name is a substring in summary or description
+    // This helps catch cases in all-day events or irregular formats
+    const summaryUpper = event.summary.toUpperCase();
+    const descriptionUpper = event.description ? event.description.toUpperCase() : '';
+
+    if (summaryUpper.includes(upperProfName)) {
+      return true;
+    }
+    
+    if (descriptionUpper.includes(upperProfName)) {
+      return true;
+    }
+
+    return false;
   });
 };
 
@@ -285,17 +304,13 @@ export default function App() {
         },
       });
 
-      // Filter events to only show the requested day
-      let filteredEvents = res.data.filter((event: Event) => {
-        const eventDate = new Date(event.start).toISOString().split('T')[0];
-        return eventDate === dateStr;
-      });
+      let filteredEvents = res.data;
 
       // Apply mode-specific filters
       if (viewMode === 'section') {
-        filteredEvents = filterEventsByClass(filteredEvents, sectionToFetch);
+        filteredEvents = filterEventsByClass(res.data, sectionToFetch);
       } else if (viewMode === 'professor') {
-        filteredEvents = filterEventsByProfessor(filteredEvents, professorToFetch);
+        filteredEvents = filterEventsByProfessor(res.data, professorToFetch);
       }
 
       // Sort events by start time
@@ -845,7 +860,7 @@ export default function App() {
                 Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
               <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>
-                Version 0.5.5
+                Version 0.6.0
               </Text>
             </ScrollView>
           </View>
