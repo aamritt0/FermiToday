@@ -42,7 +42,7 @@ const extractProfessorFromSummary = (summary: string): string[] => {
   const professors: string[] = [];
   
   // First, check for PROFF. (plural) which indicates multiple professors separated by commas
-  const pluralMatch = summary.match(/PROFF?\.\s*([A-Z][A-Z\s,.']+?)(?=\s*$|")/i);
+  const pluralMatch = summary.match(/PROFF?\.(?:ssa)?\s*([A-Z][A-Z\s,.']+?)(?=\s*CLASSE|\s*AULA|\s*ASSENTE|\s*$)/i);
   if (pluralMatch) {
     // Split by comma and extract each professor name
     const names = pluralMatch[1].split(',');
