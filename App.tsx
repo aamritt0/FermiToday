@@ -1135,7 +1135,7 @@ export default function App() {
               <Text
                 style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}
               >
-                Version 0.6.0
+                Version 0.6.5
               </Text>
             </ScrollView>
           </View>
