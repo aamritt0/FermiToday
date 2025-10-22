@@ -39,14 +39,31 @@ const extractClassFromSummary = (summary: string): string | null => {
 
 // Helper function to extract professor name from event summary
 const extractProfessorFromSummary = (summary: string): string[] => {
-  // Match all instances of PROF. or PROF.ssa followed by name
-  // This regex looks for PROF or PROF.ssa, optional spaces/dots, then captures uppercase letters/spaces until a non-letter character
+  const professors: string[] = [];
+  
+  // First, check for PROFF. (plural) which indicates multiple professors separated by commas
+  const pluralMatch = summary.match(/PROFF?\.\s*([A-Z][A-Z\s,.']+?)(?=\s*$|")/i);
+  if (pluralMatch) {
+    // Split by comma and extract each professor name
+    const names = pluralMatch[1].split(',');
+    for (const name of names) {
+      // Remove trailing apostrophes and quotes, then trim
+      const trimmedName = name.trim().replace(/['"]+$/, '').trim().replace(/\s+/g, " ");
+      if (trimmedName.length > 0 && trimmedName.length < 50) {
+        professors.push(trimmedName);
+      }
+    }
+    if (professors.length > 0) {
+      return professors;
+    }
+  }
+  
+  // Otherwise, match individual PROF. or PROF.ssa instances
   const profMatches = [
     ...summary.matchAll(
-      /PROF\.?(?:ssa)?\.?\s*([A-Z][A-Z\s]+?)(?=\s*[\(\),]|\s+ASSENTE|\s+CLASSE|\s*$)/gi
+      /PROF\.?(?:ssa)?\.?\s*([A-Z][A-Z\s]+?)(?=\s*[,\(\)]|\s+ASSENTE|\s+CLASSE|\s*$)/gi
     ),
   ];
-  const professors: string[] = [];
 
   for (const match of profMatches) {
     if (match[1]) {
@@ -80,7 +97,7 @@ const filterEventsByProfessor = (
     // Attempt to extract professors using the regex from summary
     const extractedProfs = extractProfessorFromSummary(event.summary);
 
-    // If regex finds professors, check for an exact match
+    // Check for an exact match with extracted professors
     if (extractedProfs.length > 0) {
       const found = extractedProfs.some(
         (prof) => prof.toUpperCase() === upperProfName
@@ -88,18 +105,14 @@ const filterEventsByProfessor = (
       if (found) return true;
     }
 
-    // Fallback: Check if the professor's name is a substring in summary or description
-    // This helps catch cases in all-day events or irregular formats
-    const summaryUpper = event.summary.toUpperCase();
+    // Fallback: Only check description for professor mentions
+    // Use word boundary check to avoid matching class codes
     const descriptionUpper = event.description
       ? event.description.toUpperCase()
       : "";
 
-    if (summaryUpper.includes(upperProfName)) {
-      return true;
-    }
-
-    if (descriptionUpper.includes(upperProfName)) {
+    // Check if professor name appears in description with word boundaries
+    if (descriptionUpper.includes(`PROF`) && descriptionUpper.includes(upperProfName)) {
       return true;
     }
 
