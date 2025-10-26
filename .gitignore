@@ -43,3 +43,5 @@ yarn-error.*
 
 # eas
 /eas.json
+
+google-services.json
