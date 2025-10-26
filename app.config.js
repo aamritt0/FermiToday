@@ -41,8 +41,11 @@ export default {
       predictiveBackGestureEnabled: false,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       permissions: [
-        "NOTIFICATIONS" 
+        "NOTIFICATIONS" ,
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
       ],
+      useNextNotificationsApi: true,
     },
     web: {
       favicon: "./assets/favicon.png"
