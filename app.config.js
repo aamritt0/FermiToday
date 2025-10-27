@@ -4,7 +4,7 @@ export default {
   expo: {
     name: "FermiToday",
     slug: "fermi-today",
-    version: "0.7.0",
+    version: "0.7.5",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -39,13 +39,11 @@ export default {
       package: "com.scuola.fermitoday",
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       permissions: [
         "NOTIFICATIONS" ,
         "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK"
-      ],
-      useNextNotificationsApi: true,
+      ]
     },
     web: {
       favicon: "./assets/favicon.png"
