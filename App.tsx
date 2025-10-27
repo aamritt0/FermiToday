@@ -713,7 +713,7 @@ export default function App() {
               <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
                 Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
               </Text>
-              <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.0</Text>
+              <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.5</Text>
             </ScrollView>
           </View>
         </View>
