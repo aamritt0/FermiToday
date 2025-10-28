@@ -171,41 +171,78 @@ export default function App() {
   };
 
   async function registerForPushNotificationsAsync() {
-    let token;
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('fermitoday_updates', {
-        name: 'FermiToday Updates',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#6366f1',
-      });
-    }
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') {
-        Alert.alert('Notifiche disabilitate', 'Per ricevere le notifiche sulle variazioni, attiva le notifiche nelle impostazioni.');
-        return;
-      }
-      token = (await Notifications.getExpoPushTokenAsync({ projectId: '80ad0eb0-cd57-4b36-bebd-10bb86061534' })).data;
-      console.log('Push token:', token);
-    } else {
-      Alert.alert('Errore', 'Le notifiche funzionano solo su dispositivi fisici.');
-    }
-    return token;
+  let token;
+  
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('fermitoday_updates', {
+      name: 'FermiToday Updates',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#6366f1',
+    });
   }
+  
+  if (Device.isDevice) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    if (finalStatus !== 'granted') {
+      Alert.alert(
+        'Notifiche disabilitate', 
+        'Per ricevere le notifiche sulle variazioni, attiva le notifiche nelle impostazioni.'
+      );
+      return null;
+    }
+    
+    try {
+      token = (await Notifications.getExpoPushTokenAsync({ 
+        projectId: '80ad0eb0-cd57-4b36-bebd-10bb86061534' 
+      })).data;
+      console.log('✅ Push token obtained:', token.substring(0, 30) + '...');
+    } catch (error: any) {
+      console.error('❌ Failed to get push token:', error.message);
+      Alert.alert('Errore', 'Impossibile ottenere il token delle notifiche: ' + error.message);
+      return null;
+    }
+  } else {
+    Alert.alert('Errore', 'Le notifiche funzionano solo su dispositivi fisici.');
+    return null;
+  }
+  
+  return token;
+}
 
   async function registerTokenWithBackend(token: string) {
     try {
-      await axios.post(`${BACKEND_URL}/register-token`, { token, section: notificationSection || null, professor: notificationProfessor || null, digestEnabled, digestTime, realtimeEnabled });
-      console.log('✅ Token registered with backend');
+      const payload = {
+        token: token,
+        section: notificationSection.trim() || null,
+        professor: notificationProfessor.trim() || null,
+        digestEnabled: digestEnabled,
+        digestTime: digestTime,
+        realtimeEnabled: realtimeEnabled
+      };
+      
+      console.log('📤 Registering token:', {
+        tokenPreview: token.substring(0, 30) + '...',
+        section: payload.section,
+        professor: payload.professor
+      });
+      
+      const response = await axios.post(`${BACKEND_URL}/register-token`, payload, {
+        timeout: 10000,
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      console.log('✅ Backend response:', response.data);
       return true;
-    } catch (error) {
-      console.error('❌ Failed to register token:', error);
+    } catch (error: any) {
+      console.error('❌ Registration failed:', error.response?.data || error.message);
       return false;
     }
   }
@@ -309,24 +346,91 @@ export default function App() {
   };
 
   const toggleNotifications = async (enabled: boolean) => {
-    if (enabled) {
+  if (enabled) {
+    try {
+      // First, get the push token
       const token = await registerForPushNotificationsAsync();
-      if (token) {
-        setExpoPushToken(token);
-        const success = await registerTokenWithBackend(token);
-        if (success) {
-          setNotificationsEnabled(true);
-          showNotification('Notifiche attivate!', 'info');
-        } else {
-          showNotification('Errore nell\'attivazione delle notifiche');
-        }
+      
+      if (!token) {
+        showNotification('Impossibile ottenere il token delle notifiche', 'error');
+        return; // Don't enable notifications
       }
-    } else {
-      if (expoPushToken) await unregisterTokenFromBackend(expoPushToken);
+
+      console.log('✅ Got push token:', token.substring(0, 30) + '...');
+      
+      // Save token to state and AsyncStorage
+      setExpoPushToken(token);
+      await AsyncStorage.setItem('expoPushToken', token);
+
+      // Prepare payload for backend
+      const payload = {
+        token: token,
+        section: notificationSection.trim() || null,
+        professor: notificationProfessor.trim() || null,
+        digestEnabled: digestEnabled,
+        digestTime: digestTime,
+        realtimeEnabled: realtimeEnabled
+      };
+      
+      console.log('📤 Registering with backend:', {
+        tokenPreview: token.substring(0, 30) + '...',
+        section: payload.section,
+        professor: payload.professor,
+        digestEnabled: payload.digestEnabled,
+        realtimeEnabled: payload.realtimeEnabled
+      });
+      
+      // Register with backend
+      const response = await axios.post(
+        `${BACKEND_URL}/register-token`, 
+        payload,
+        {
+          timeout: 10000,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      
+      console.log('✅ Backend registration successful:', response.data);
+      
+      // Only enable notifications after successful backend registration
+      setNotificationsEnabled(true);
+      showNotification('Notifiche attivate! Configura classe o professore.', 'info');
+      
+    } catch (error: any) {
+      console.error('❌ Notification registration failed:', error.response?.data || error.message);
+      
+      // Clean up on failure
+      setExpoPushToken('');
       setNotificationsEnabled(false);
-      showNotification('Notifiche disattivate', 'info');
+      
+      // Show specific error message
+      let errorMessage = 'Errore nell\'attivazione delle notifiche';
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Timeout nella registrazione. Riprova.';
+      } else if (error.response) {
+        errorMessage = error.response.data?.error || 'Errore del server';
+      } else if (error.request) {
+        errorMessage = 'Nessuna connessione al server';
+      }
+      
+      showNotification(errorMessage, 'error');
     }
-  };
+  } else {
+    // Disable notifications
+    try {
+      if (expoPushToken) {
+        await unregisterTokenFromBackend(expoPushToken);
+      }
+      setNotificationsEnabled(false);
+      setExpoPushToken('');
+      await AsyncStorage.removeItem('expoPushToken');
+      showNotification('Notifiche disattivate', 'info');
+    } catch (error) {
+      console.error('❌ Error disabling notifications:', error);
+      showNotification('Errore nella disattivazione', 'error');
+    }
+  }
+};
 
   const fetchEvents = React.useCallback(async (isRefresh = false, targetSection?: string, targetProfessor?: string, targetDate?: "today" | "tomorrow") => {
     Keyboard.dismiss();
@@ -702,6 +806,20 @@ export default function App() {
               </TouchableOpacity>
 
               <View style={[styles.separator, isDark && styles.separatorDark]} />
+
+              <TouchableOpacity 
+  style={styles.addSectionButton} 
+  onPress={async () => {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/health`);
+      Alert.alert('Backend Status', JSON.stringify(response.data, null, 2));
+    } catch (error: any) {
+      Alert.alert('Backend Error', error.message);
+    }
+  }}
+>
+  <Text style={styles.addSectionText}>Test Backend Connection</Text>
+</TouchableOpacity>
 
               <View style={styles.sectionHeader}>
                 <MaterialIcons name="info" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
