@@ -807,20 +807,6 @@ export default function App() {
 
               <View style={[styles.separator, isDark && styles.separatorDark]} />
 
-              <TouchableOpacity 
-  style={styles.addSectionButton} 
-  onPress={async () => {
-    try {
-      const response = await axios.get(`${BACKEND_URL}/health`);
-      Alert.alert('Backend Status', JSON.stringify(response.data, null, 2));
-    } catch (error: any) {
-      Alert.alert('Backend Error', error.message);
-    }
-  }}
->
-  <Text style={styles.addSectionText}>Test Backend Connection</Text>
-</TouchableOpacity>
-
               <View style={styles.sectionHeader}>
                 <MaterialIcons name="info" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
                 <View style={styles.sectionHeaderText}>

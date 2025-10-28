@@ -39,6 +39,7 @@ export default {
       package: "com.scuola.fermitoday",
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       permissions: [
         "NOTIFICATIONS" ,
         "RECEIVE_BOOT_COMPLETED",
