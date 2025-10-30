@@ -22,6 +22,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import axios from "axios";
+import OnboardingScreen from './OnboardingScreen';
 
 const BACKEND_URL = "https://purring-celesta-fermitoday-f00679ea.koyeb.app";
 
@@ -154,6 +155,7 @@ export default function App() {
   const [digestTime, setDigestTime] = useState('06:00');
   const [realtimeEnabled, setRealtimeEnabled] = useState(true);
   const [expoPushToken, setExpoPushToken] = useState('');
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -323,6 +325,12 @@ export default function App() {
       if (digestT !== null) setDigestTime(digestT);
       if (realtime !== null) setRealtimeEnabled(JSON.parse(realtime));
       if (pushToken !== null) setExpoPushToken(pushToken);
+      const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
+      if (onboardingComplete !== null) {
+        setHasCompletedOnboarding(JSON.parse(onboardingComplete));
+      } else {
+        setHasCompletedOnboarding(false); // First time user
+      }
     } catch (error) {
       console.error("Error loading settings:", error);
     }
@@ -342,6 +350,16 @@ export default function App() {
       if (expoPushToken) await AsyncStorage.setItem('expoPushToken', expoPushToken);
     } catch (error) {
       console.error("Error saving settings:", error);
+    }
+  };
+
+  //handle onboarding completion
+  const handleOnboardingComplete = async () => {
+    try {
+      await AsyncStorage.setItem('onboardingComplete', JSON.stringify(true));
+      setHasCompletedOnboarding(true);
+    } catch (error) {
+      console.error("Error saving onboarding state:", error);
     }
   };
 
@@ -538,298 +556,334 @@ export default function App() {
   }, [dateFilter, viewMode, section, professor]);
 
   return (
-    <SafeAreaView style={containerStyle} edges={["top", "left", "right"]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#1a1a1a" : "#fff"} />
-      <View style={headerStyle}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={titleStyle}>Variazioni</Text>
-            <Text style={subtitleStyle}>{getSubtitle}</Text>
-          </View>
-          <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
-            <MaterialIcons name="settings" size={28} color={isDark ? "#fff" : "#1a1a1a"} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={[styles.viewModeContainer, isDark && styles.viewModeContainerDark]}>
-        {["section", "professor", "all"].map((mode) => (
-          <TouchableOpacity key={mode} style={[styles.viewModeButton, viewMode === mode && styles.viewModeButtonActive, isDark && styles.viewModeButtonDark]} onPress={() => setViewMode(mode as any)}>
-            <MaterialIcons name={mode === "section" ? "class" : mode === "professor" ? "person" : "view-list"} size={18} color={viewMode === mode ? "#6366f1" : isDark ? "#999" : "#666"} />
-            <Text style={[styles.viewModeText, viewMode === mode && styles.viewModeTextActive, isDark && styles.viewModeTextDark]}>
-              {mode === "section" ? "Classe" : mode === "professor" ? "Prof." : "Tutti"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {viewMode === "section" && (
-        <View style={searchContainerStyle}>
-          <View style={styles.inputWrapper}>
-            <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Classe</Text>
-            <TextInput style={inputStyle} value={section} onChangeText={setSection} placeholder="es. 5AIIN, 3B..." placeholderTextColor={isDark ? "#666" : "#999"} autoCorrect={false} />
-          </View>
-          <TouchableOpacity style={styles.fetchButton} onPress={() => fetchEvents()} activeOpacity={0.8}>
-            <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
-            <Text style={styles.fetchButtonText}>Cerca</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {viewMode === "professor" && (
-        <View style={searchContainerStyle}>
-          <View style={styles.inputWrapper}>
-            <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Prof.</Text>
-            <TextInput style={inputStyle} value={professor} onChangeText={setProfessor} placeholder="es. ROSSI" placeholderTextColor={isDark ? "#666" : "#999"} autoCorrect={false} />
-          </View>
-          <TouchableOpacity style={styles.fetchButton} onPress={() => fetchEvents()} activeOpacity={0.8}>
-            <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
-            <Text style={styles.fetchButtonText}>Cerca</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {viewMode === "section" && savedSections.length > 0 && (
-        <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickSelectContent}>
-            {savedSections.map((sec) => (
-              <TouchableOpacity key={sec} style={[styles.quickButton, section === sec && styles.quickButtonActive, isDark && section !== sec && styles.quickButtonDark]} onPress={() => handleQuickSectionSelect(sec)} activeOpacity={0.7}>
-                <Text style={[styles.quickButtonText, section === sec && styles.quickButtonTextActive, isDark && section !== sec && styles.quickButtonTextDark]}>{sec}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {viewMode === "professor" && savedProfessors.length > 0 && (
-        <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickSelectContent}>
-            {savedProfessors.map((prof) => (
-              <TouchableOpacity key={prof} style={[styles.quickButton, professor === prof && styles.quickButtonActive, isDark && professor !== prof && styles.quickButtonDark]} onPress={() => handleQuickProfessorSelect(prof)} activeOpacity={0.7}>
-                <Text style={[styles.quickButtonText, professor === prof && styles.quickButtonTextActive, isDark && professor !== prof && styles.quickButtonTextDark]}>{prof}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      <View style={[styles.dateFilterContainer, isDark && styles.dateFilterContainerDark]}>
-        {["today", "tomorrow"].map((filter) => (
-          <TouchableOpacity key={filter} style={[styles.dateFilterButton, dateFilter === filter && styles.dateFilterButtonActive, isDark && styles.dateFilterButtonDark]} onPress={() => setDateFilter(filter as any)}>
-            <MaterialIcons name={filter === "today" ? "today" : "event"} size={18} color={dateFilter === filter ? "#6366f1" : isDark ? "#999" : "#666"} />
-            <Text style={[styles.dateFilterText, dateFilter === filter && styles.dateFilterTextActive, isDark && styles.dateFilterTextDark]}>
-              {filter === "today" ? "Oggi" : "Domani"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        {loading ? (
+    <>
+      {hasCompletedOnboarding === null ? (
+        <View style={[styles.container, isDark && styles.containerDark]}>
           <View style={styles.centerContainer}>
-            <View style={styles.loader}>
-              <MaterialIcons name="hourglass-empty" size={48} color={isDark ? "#999" : "#666"} />
-              <Text style={[styles.loaderText, isDark && styles.loaderTextDark]}>Loading...</Text>
+            <MaterialIcons name="hourglass-empty" size={48} color={isDark ? "#999" : "#666"} />
+          </View>
+        </View>
+      ) : hasCompletedOnboarding === false ? (
+        <OnboardingScreen onComplete={handleOnboardingComplete} isDark={isDark} />
+      ) : (
+        <SafeAreaView style={containerStyle} edges={["top", "left", "right"]}>
+          <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#1a1a1a" : "#fff"} />
+          <View style={headerStyle}>
+            <View style={styles.headerTop}>
+              <View>
+                <Text style={titleStyle}>Variazioni</Text>
+                <Text style={subtitleStyle}>{getSubtitle}</Text>
+              </View>
+              <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
+                <MaterialIcons name="settings" size={28} color={isDark ? "#fff" : "#1a1a1a"} />
+              </TouchableOpacity>
             </View>
           </View>
-        ) : events.length === 0 ? (
-          <View style={styles.centerContainer}>
-            <MaterialIcons name="event-available" size={64} color={isDark ? "#666" : "#999"} />
-            <Text style={emptyTitleStyle}>Tutto a posto!</Text>
-            <Text style={emptyTextStyle}>
-              Nessuna variazione trovata per {viewMode === "all" ? "oggi" : viewMode === "professor" ? (professor || "il professore") : (section || "la tua classe")}.
-            </Text>
+      
+          <View style={[styles.viewModeContainer, isDark && styles.viewModeContainerDark]}>
+            {["section", "professor", "all"].map((mode) => (
+              <TouchableOpacity key={mode} style={[styles.viewModeButton, viewMode === mode && styles.viewModeButtonActive, isDark && styles.viewModeButtonDark]} onPress={() => setViewMode(mode as any)}>
+                <MaterialIcons name={mode === "section" ? "class" : mode === "professor" ? "person" : "view-list"} size={18} color={viewMode === mode ? "#6366f1" : isDark ? "#999" : "#666"} />
+                <Text style={[styles.viewModeText, viewMode === mode && styles.viewModeTextActive, isDark && styles.viewModeTextDark]}>
+                  {mode === "section" ? "Classe" : mode === "professor" ? "Prof." : "Tutti"}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        ) : (
-          <FlatList
-            data={events}
-            keyExtractor={(item, index) => `${item.id}-${index}`}
-            renderItem={({ item, index }) => <EventCard item={item} index={index} isDark={isDark} />}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" colors={["#6366f1"]} />}
-          />
-        )}
-      </Animated.View>
-
-      <Modal visible={showSettings} animationType="slide" transparent={true} onRequestClose={() => setShowSettings(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={modalStyle}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Impostazioni</Text>
-              <TouchableOpacity onPress={() => setShowSettings(false)}>
-                <MaterialIcons name="close" size={28} color={isDark ? "#999" : "#666"} />
+          
+          {viewMode === "section" && (
+            <View style={searchContainerStyle}>
+              <View style={styles.inputWrapper}>
+                <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Classe</Text>
+                <TextInput style={inputStyle} value={section} onChangeText={setSection} placeholder="es. 5AIIN, 3B..." placeholderTextColor={isDark ? "#666" : "#999"} autoCorrect={false} />
+              </View>
+              <TouchableOpacity style={styles.fetchButton} onPress={() => fetchEvents()} activeOpacity={0.8}>
+                <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
+                <Text style={styles.fetchButtonText}>Cerca</Text>
               </TouchableOpacity>
             </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollViewContent}>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <MaterialIcons name="dark-mode" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
-                  <View style={styles.settingTextContainer}>
-                    <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Tema scuro</Text>
-                    <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Applica tema scuro</Text>
-                  </View>
-                </View>
-                <Switch value={isDark} onValueChange={setIsDark} trackColor={{ false: "#d1d5db", true: "#818cf8" }} thumbColor={isDark ? "#6366f1" : "#f3f4f6"} />
+          )}
+  
+          {viewMode === "professor" && (
+            <View style={searchContainerStyle}>
+              <View style={styles.inputWrapper}>
+                <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Prof.</Text>
+                <TextInput style={inputStyle} value={professor} onChangeText={setProfessor} placeholder="es. ROSSI" placeholderTextColor={isDark ? "#666" : "#999"} autoCorrect={false} />
               </View>
-
-              <View style={[styles.separator, isDark && styles.separatorDark]} />
-
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="notifications" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
-                <View style={styles.sectionHeaderText}>
-                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Notifiche Push</Text>
-                  <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>Ricevi notifiche sulle variazioni</Text>
-                </View>
-              </View>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <MaterialIcons name="notifications-active" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
-                  <View style={styles.settingTextContainer}>
-                    <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Abilita notifiche</Text>
-                    <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Ricevi notifiche su variazioni</Text>
-                  </View>
-                </View>
-                <Switch value={notificationsEnabled} onValueChange={toggleNotifications} trackColor={{ false: '#d1d5db', true: '#818cf8' }} thumbColor={notificationsEnabled ? '#6366f1' : '#f3f4f6'} />
-              </View>
-
-              {notificationsEnabled && (
-                <>
-                  <View style={[styles.notificationInput, isDark && styles.notificationInputDark]}>
-                    <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Classe per notifiche</Text>
-                    <TextInput style={[inputStyle, { marginBottom: 0 }]} value={notificationSection} onChangeText={setNotificationSection} placeholder="es. 5AIIN" placeholderTextColor={isDark ? '#666' : '#999'} autoCorrect={false} />
-                  </View>
-
-                  <View style={[styles.notificationInput, isDark && styles.notificationInputDark]}>
-                    <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Prof. per notifiche (opzionale)</Text>
-                    <TextInput style={[inputStyle, { marginBottom: 0 }]} value={notificationProfessor} onChangeText={setNotificationProfessor} placeholder="es. ROSSI" placeholderTextColor={isDark ? '#666' : '#999'} autoCorrect={false} />
-                  </View>
-
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                      <MaterialIcons name="schedule" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
-                      <View style={styles.settingTextContainer}>
-                        <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Riepilogo giornaliero</Text>
-                        <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Notifica con le variazioni del giorno</Text>
-                      </View>
-                    </View>
-                    <Switch value={digestEnabled} onValueChange={setDigestEnabled} trackColor={{ false: '#d1d5db', true: '#818cf8' }} thumbColor={digestEnabled ? '#6366f1' : '#f3f4f6'} />
-                  </View>
-
-                  {digestEnabled && (
-                    <View style={[styles.timePickerContainer, isDark && styles.timePickerContainerDark]}>
-                      <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Orario riepilogo</Text>
-                      <View style={styles.timeButtons}>
-                        {['06:00', '07:00', '08:00'].map((time) => (
-                          <TouchableOpacity key={time} style={[styles.timeButton, digestTime === time && styles.timeButtonActive, isDark && styles.timeButtonDark]} onPress={() => setDigestTime(time)}>
-                            <Text style={[styles.timeButtonText, digestTime === time && styles.timeButtonTextActive, isDark && styles.timeButtonTextDark]}>{time}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                      <MaterialIcons name="bolt" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
-                      <View style={styles.settingTextContainer}>
-                        <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Notifiche in tempo reale</Text>
-                        <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Notifica quando vengono aggiunte nuove variazioni</Text>
-                      </View>
-                    </View>
-                    <Switch value={realtimeEnabled} onValueChange={setRealtimeEnabled} trackColor={{ false: '#d1d5db', true: '#818cf8' }} thumbColor={realtimeEnabled ? '#6366f1' : '#f3f4f6'} />
-                  </View>
-
-                  {(!notificationSection && !notificationProfessor) && (
-                    <View style={[styles.warningBox, isDark && styles.warningBoxDark]}>
-                      <MaterialIcons name="warning" size={20} color="#f59e0b" />
-                      <Text style={[styles.warningText, isDark && styles.warningTextDark]}>Inserisci almeno una classe o un professore per ricevere notifiche</Text>
-                    </View>
-                  )}
-                </>
-              )}
-
-              <View style={[styles.separator, isDark && styles.separatorDark]} />
-
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="bookmark" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
-                <View style={styles.sectionHeaderText}>
-                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Classi salvate</Text>
-                  <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>Accesso rapido alle tue classi preferite</Text>
-                </View>
-              </View>
-
-              {savedSections.map((sec) => (
-                <View key={sec} style={[styles.savedSectionRow, isDark && styles.savedSectionRowDark]}>
-                  <View style={styles.savedSectionLeft}>
-                    <MaterialIcons name="class" size={20} color={isDark ? "#fff" : "#1a1a1a"} />
-                    <Text style={[styles.savedSectionText, isDark && styles.savedSectionTextDark]}>{sec}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => removeSection(sec)}>
-                    <MaterialIcons name="delete" size={20} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-
-              <TouchableOpacity style={styles.addSectionButton} onPress={addSection} activeOpacity={0.8}>
-                <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
-                <Text style={styles.addSectionText}>Aggiungi classe corrente</Text>
+              <TouchableOpacity style={styles.fetchButton} onPress={() => fetchEvents()} activeOpacity={0.8}>
+                <MaterialIcons name="search" size={20} color="#fff" style={styles.searchIcon} />
+                <Text style={styles.fetchButtonText}>Cerca</Text>
               </TouchableOpacity>
-
-              <View style={[styles.separator, isDark && styles.separatorDark]} />
-
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="person" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
-                <View style={styles.sectionHeaderText}>
-                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Prof. salvati</Text>
-                  <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>Accesso rapido per i prof.</Text>
-                </View>
-              </View>
-
-              {savedProfessors.map((prof) => (
-                <View key={prof} style={[styles.savedSectionRow, isDark && styles.savedSectionRowDark]}>
-                  <View style={styles.savedSectionLeft}>
-                    <MaterialIcons name="person" size={20} color={isDark ? "#fff" : "#1a1a1a"} />
-                    <Text style={[styles.savedSectionText, isDark && styles.savedSectionTextDark]}>{prof}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => removeProfessor(prof)}>
-                    <MaterialIcons name="delete" size={20} color="#ef4444" />
+            </View>
+          )}
+  
+          {viewMode === "section" && savedSections.length > 0 && (
+            <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickSelectContent}>
+                {savedSections.map((sec) => (
+                  <TouchableOpacity key={sec} style={[styles.quickButton, section === sec && styles.quickButtonActive, isDark && section !== sec && styles.quickButtonDark]} onPress={() => handleQuickSectionSelect(sec)} activeOpacity={0.7}>
+                    <Text style={[styles.quickButtonText, section === sec && styles.quickButtonTextActive, isDark && section !== sec && styles.quickButtonTextDark]}>{sec}</Text>
                   </TouchableOpacity>
-                </View>
-              ))}
-
-              <TouchableOpacity style={styles.addSectionButton} onPress={addProfessor} activeOpacity={0.8}>
-                <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
-                <Text style={styles.addSectionText}>Aggiungi prof. corrente</Text>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+  
+          {viewMode === "professor" && savedProfessors.length > 0 && (
+            <View style={isDark ? styles.quickSelectWrapperDark : styles.quickSelectWrapper}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickSelectContent}>
+                {savedProfessors.map((prof) => (
+                  <TouchableOpacity key={prof} style={[styles.quickButton, professor === prof && styles.quickButtonActive, isDark && professor !== prof && styles.quickButtonDark]} onPress={() => handleQuickProfessorSelect(prof)} activeOpacity={0.7}>
+                    <Text style={[styles.quickButtonText, professor === prof && styles.quickButtonTextActive, isDark && professor !== prof && styles.quickButtonTextDark]}>{prof}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+  
+          <View style={[styles.dateFilterContainer, isDark && styles.dateFilterContainerDark]}>
+            {["today", "tomorrow"].map((filter) => (
+              <TouchableOpacity key={filter} style={[styles.dateFilterButton, dateFilter === filter && styles.dateFilterButtonActive, isDark && styles.dateFilterButtonDark]} onPress={() => setDateFilter(filter as any)}>
+                <MaterialIcons name={filter === "today" ? "today" : "event"} size={18} color={dateFilter === filter ? "#6366f1" : isDark ? "#999" : "#666"} />
+                <Text style={[styles.dateFilterText, dateFilter === filter && styles.dateFilterTextActive, isDark && styles.dateFilterTextDark]}>
+                  {filter === "today" ? "Oggi" : "Domani"}
+                </Text>
               </TouchableOpacity>
-
-              <View style={[styles.separator, isDark && styles.separatorDark]} />
-
-              <View style={styles.sectionHeader}>
-                <MaterialIcons name="info" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
-                <View style={styles.sectionHeaderText}>
-                  <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>About</Text>
-                </View>
-              </View>
-              <Text style={[styles.aboutText, isDark && styles.aboutTextDark]}>FermiToday</Text>
-              <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
-                Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
-              </Text>
-              <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.5</Text>
-            </ScrollView>
+            ))}
           </View>
-        </View>
-      </Modal>
-
-      {notification && (
-        <Animated.View style={[styles.notification, notification.type === "error" ? styles.notificationError : styles.notificationInfo, { opacity: notificationAnim, transform: [{ translateY: notificationAnim.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }] }]}>
-          <MaterialIcons name={notification.type === "error" ? "error-outline" : "info-outline"} size={24} color="#fff" />
-          <Text style={styles.notificationText}>{notification.message}</Text>
-        </Animated.View>
+          
+          <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            {loading ? (
+              <View style={styles.centerContainer}>
+                <View style={styles.loader}>
+                  <MaterialIcons name="hourglass-empty" size={48} color={isDark ? "#999" : "#666"} />
+                  <Text style={[styles.loaderText, isDark && styles.loaderTextDark]}>Loading...</Text>
+                </View>
+              </View>
+            ) : events.length === 0 ? (
+              <View style={styles.centerContainer}>
+                <MaterialIcons name="event-available" size={64} color={isDark ? "#666" : "#999"} />
+                <Text style={emptyTitleStyle}>Tutto a posto!</Text>
+                <Text style={emptyTextStyle}>
+                  Nessuna variazione trovata per {viewMode === "all" ? "oggi" : viewMode === "professor" ? (professor || "il professore") : (section || "la tua classe")}.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={events}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                renderItem={({ item, index }) => <EventCard item={item} index={index} isDark={isDark} />}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" colors={["#6366f1"]} />}
+              />
+            )}
+          </Animated.View>
+          
+          <Modal visible={showSettings} animationType="slide" transparent={true} onRequestClose={() => setShowSettings(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={modalStyle}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Impostazioni</Text>
+                  <TouchableOpacity onPress={() => setShowSettings(false)}>
+                    <MaterialIcons name="close" size={28} color={isDark ? "#999" : "#666"} />
+                  </TouchableOpacity>
+                </View>
+          
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollViewContent}>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <MaterialIcons name="dark-mode" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                      <View style={styles.settingTextContainer}>
+                        <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Tema scuro</Text>
+                        <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Applica tema scuro</Text>
+                      </View>
+                    </View>
+                    <Switch value={isDark} onValueChange={setIsDark} trackColor={{ false: "#d1d5db", true: "#818cf8" }} thumbColor={isDark ? "#6366f1" : "#f3f4f6"} />
+                  </View>
+          
+                  <View style={[styles.separator, isDark && styles.separatorDark]} />
+          
+                  <View style={styles.sectionHeader}>
+                    <MaterialIcons name="notifications" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                    <View style={styles.sectionHeaderText}>
+                      <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Notifiche Push</Text>
+                      <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>Ricevi notifiche sulle variazioni</Text>
+                    </View>
+                  </View>
+          
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <MaterialIcons name="notifications-active" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                      <View style={styles.settingTextContainer}>
+                        <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Abilita notifiche</Text>
+                        <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Ricevi notifiche su variazioni</Text>
+                      </View>
+                    </View>
+                    <Switch value={notificationsEnabled} onValueChange={toggleNotifications} trackColor={{ false: '#d1d5db', true: '#818cf8' }} thumbColor={notificationsEnabled ? '#6366f1' : '#f3f4f6'} />
+                  </View>
+          
+                  {notificationsEnabled && (
+                    <>
+                      <View style={[styles.notificationInput, isDark && styles.notificationInputDark]}>
+                        <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Classe per notifiche</Text>
+                        <TextInput style={[inputStyle, { marginBottom: 0 }]} value={notificationSection} onChangeText={setNotificationSection} placeholder="es. 5AIIN" placeholderTextColor={isDark ? '#666' : '#999'} autoCorrect={false} />
+                      </View>
+                  
+                      <View style={[styles.notificationInput, isDark && styles.notificationInputDark]}>
+                        <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Prof. per notifiche (opzionale)</Text>
+                        <TextInput style={[inputStyle, { marginBottom: 0 }]} value={notificationProfessor} onChangeText={setNotificationProfessor} placeholder="es. ROSSI" placeholderTextColor={isDark ? '#666' : '#999'} autoCorrect={false} />
+                      </View>
+                  
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingLeft}>
+                          <MaterialIcons name="schedule" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                          <View style={styles.settingTextContainer}>
+                            <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Riepilogo giornaliero</Text>
+                            <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Notifica con le variazioni del giorno</Text>
+                          </View>
+                        </View>
+                        <Switch value={digestEnabled} onValueChange={setDigestEnabled} trackColor={{ false: '#d1d5db', true: '#818cf8' }} thumbColor={digestEnabled ? '#6366f1' : '#f3f4f6'} />
+                      </View>
+                  
+                      {digestEnabled && (
+                        <View style={[styles.timePickerContainer, isDark && styles.timePickerContainerDark]}>
+                          <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Orario riepilogo</Text>
+                          <View style={styles.timeButtons}>
+                            {['06:00', '07:00', '08:00'].map((time) => (
+                              <TouchableOpacity key={time} style={[styles.timeButton, digestTime === time && styles.timeButtonActive, isDark && styles.timeButtonDark]} onPress={() => setDigestTime(time)}>
+                                <Text style={[styles.timeButtonText, digestTime === time && styles.timeButtonTextActive, isDark && styles.timeButtonTextDark]}>{time}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+  
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingLeft}>
+                          <MaterialIcons name="bolt" size={24} color={isDark ? '#fff' : '#1a1a1a'} />
+                          <View style={styles.settingTextContainer}>
+                            <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Notifiche in tempo reale</Text>
+                            <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Notifica quando vengono aggiunte nuove variazioni</Text>
+                          </View>
+                        </View>
+                        <Switch value={realtimeEnabled} onValueChange={setRealtimeEnabled} trackColor={{ false: '#d1d5db', true: '#818cf8' }} thumbColor={realtimeEnabled ? '#6366f1' : '#f3f4f6'} />
+                      </View>
+                    
+                      {(!notificationSection && !notificationProfessor) && (
+                        <View style={[styles.warningBox, isDark && styles.warningBoxDark]}>
+                          <MaterialIcons name="warning" size={20} color="#f59e0b" />
+                          <Text style={[styles.warningText, isDark && styles.warningTextDark]}>Inserisci almeno una classe o un professore per ricevere notifiche</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
+  
+                  <View style={[styles.separator, isDark && styles.separatorDark]} />
+                
+                  <View style={styles.sectionHeader}>
+                    <MaterialIcons name="bookmark" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                    <View style={styles.sectionHeaderText}>
+                      <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Classi salvate</Text>
+                      <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>Accesso rapido alle tue classi preferite</Text>
+                    </View>
+                  </View>
+                
+                  {savedSections.map((sec) => (
+                    <View key={sec} style={[styles.savedSectionRow, isDark && styles.savedSectionRowDark]}>
+                      <View style={styles.savedSectionLeft}>
+                        <MaterialIcons name="class" size={20} color={isDark ? "#fff" : "#1a1a1a"} />
+                        <Text style={[styles.savedSectionText, isDark && styles.savedSectionTextDark]}>{sec}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => removeSection(sec)}>
+                        <MaterialIcons name="delete" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+  
+                  <TouchableOpacity style={styles.addSectionButton} onPress={addSection} activeOpacity={0.8}>
+                    <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
+                    <Text style={styles.addSectionText}>Aggiungi classe corrente</Text>
+                  </TouchableOpacity>
+                
+                  <View style={[styles.separator, isDark && styles.separatorDark]} />
+                
+                  <View style={styles.sectionHeader}>
+                    <MaterialIcons name="person" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                    <View style={styles.sectionHeaderText}>
+                      <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Prof. salvati</Text>
+                      <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>Accesso rapido per i prof.</Text>
+                    </View>
+                  </View>
+                
+                  {savedProfessors.map((prof) => (
+                    <View key={prof} style={[styles.savedSectionRow, isDark && styles.savedSectionRowDark]}>
+                      <View style={styles.savedSectionLeft}>
+                        <MaterialIcons name="person" size={20} color={isDark ? "#fff" : "#1a1a1a"} />
+                        <Text style={[styles.savedSectionText, isDark && styles.savedSectionTextDark]}>{prof}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => removeProfessor(prof)}>
+                        <MaterialIcons name="delete" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+  
+                  <TouchableOpacity style={styles.addSectionButton} onPress={addProfessor} activeOpacity={0.8}>
+                    <MaterialIcons name="add" size={20} color="#fff" style={styles.addIcon} />
+                    <Text style={styles.addSectionText}>Aggiungi prof. corrente</Text>
+                  </TouchableOpacity>
+                
+                  <View style={[styles.separator, isDark && styles.separatorDark]} />
+                
+                  <TouchableOpacity 
+                    style={styles.settingRow} 
+                    onPress={async () => {
+                      await AsyncStorage.setItem('onboardingComplete', JSON.stringify(false));
+                      setHasCompletedOnboarding(false);
+                      setShowSettings(false);
+                    }}
+                  >
+                    <View style={styles.settingLeft}>
+                      <MaterialIcons name="refresh" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                      <View style={styles.settingTextContainer}>
+                        <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>
+                          Rivedi introduzione
+                        </Text>
+                        <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>
+                          Mostra di nuovo la schermata iniziale
+                        </Text>
+                      </View>
+                    </View>
+                    <MaterialIcons name="arrow-forward" size={24} color={isDark ? "#999" : "#666"} />
+                  </TouchableOpacity>
+                  
+                  <View style={[styles.separator, isDark && styles.separatorDark]} />
+                  
+                  <View style={styles.sectionHeader}>
+                    <MaterialIcons name="info" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                    <View style={styles.sectionHeaderText}>
+                      <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>About</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.aboutText, isDark && styles.aboutTextDark]}>FermiToday</Text>
+                  <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
+                    Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
+                  </Text>
+                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.5</Text>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+                  
+          {notification && (
+            <Animated.View style={[styles.notification, notification.type === "error" ? styles.notificationError : styles.notificationInfo, { opacity: notificationAnim, transform: [{ translateY: notificationAnim.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }] }]}>
+              <MaterialIcons name={notification.type === "error" ? "error-outline" : "info-outline"} size={24} color="#fff" />
+              <Text style={styles.notificationText}>{notification.message}</Text>
+            </Animated.View>
+          )}
+        </SafeAreaView>
       )}
-    </SafeAreaView>
+    </>
   );
 }
 
