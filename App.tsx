@@ -816,8 +816,8 @@ export default function App() {
                           <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Orario riepilogo</Text>
                           <View style={styles.timeButtons}>
                             {['06:00', '07:00', '08:00'].map((time) => (
-                              <TouchableOpacity key={time} style={[styles.timeButton, digestTime === time && styles.timeButtonActive, isDark && styles.timeButtonDark]} onPress={() => setDigestTime(time)}>
-                                <Text style={[styles.timeButtonText, digestTime === time && styles.timeButtonTextActive, isDark && styles.timeButtonTextDark]}>{time}</Text>
+                              <TouchableOpacity key={time} style={[styles.timeButton, isDark && styles.timeButtonDark, digestTime === time && styles.timeButtonActive]} onPress={() => setDigestTime(time)}>
+                                <Text style={[styles.timeButtonText, isDark && styles.timeButtonTextDark, digestTime === time && styles.timeButtonTextActive]}>{time}</Text>
                               </TouchableOpacity>
                             ))}
                           </View>
@@ -951,6 +951,7 @@ export default function App() {
                       <Text style={[styles.changelogDate, isDark && styles.changelogDateDark]}>8 Novembre 2025</Text>
                       <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>
                         • Aggiunto supporto tema automatico{"\n"}
+                        • Fix background dei pulsanti per la scelta dell'orario{"\n"}
                         • Miglioramenti UI e performance{"\n"}
                         • Aggiunti changelog{"\n"}
                         • Fix notifiche push
@@ -1102,7 +1103,7 @@ const styles = StyleSheet.create({
   timeButtonDark: { backgroundColor: '#2a2a2a' },
   timeButtonActive: { backgroundColor: '#6366f1' },
   timeButtonText: { fontSize: 14, fontWeight: '600', color: '#666' },
-  timeButtonTextDark: { color: '#999' },
+  timeButtonTextDark: { color: '#e0e0e0' },
   timeButtonTextActive: { color: '#fff' },
   warningBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fef3c7', padding: 12, borderRadius: 10, marginTop: 12 },
   warningBoxDark: { backgroundColor: '#422006' },
