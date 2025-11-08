@@ -4,7 +4,7 @@ export default {
   expo: {
     name: "FermiToday",
     slug: "fermi-today",
-    version: "0.7.5",
+    version: "0.8.5",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
