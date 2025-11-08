@@ -949,13 +949,13 @@ export default function App() {
                     <View style={styles.changelogItem}>
                       <Text style={[styles.changelogVersion, isDark && styles.changelogVersionDark]}>v0.8.5</Text>
                       <Text style={[styles.changelogDate, isDark && styles.changelogDateDark]}>8 Novembre 2025</Text>
-                      <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>
-                        • Aggiunto supporto tema automatico{"\n"}
-                        • Fix background dei pulsanti per la scelta dell'orario{"\n"}
-                        • Miglioramenti UI e performance{"\n"}
-                        • Aggiunti changelog{"\n"}
-                        • Fix notifiche push
-                      </Text>
+                      <View>
+                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Aggiunto supporto tema automatico</Text>
+                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Miglioramenti UI e performance</Text>
+                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Aggiunti changelog</Text>
+                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Fix notifiche push</Text>
+                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Fix background dei pulsanti per selezione orario</Text>
+                      </View>
                     </View>
                   </View>
                   
@@ -1123,21 +1123,31 @@ const styles = StyleSheet.create({
   aboutSubtextDark: { color: "#999" },
   aboutVersion: { fontSize: 12, color: "#999", fontStyle: "italic", marginBottom: 12 },
   aboutVersionDark: { color: "#666" },
-  githubIconButton: { padding: 4, marginBottom: 2 },
+  githubIconButton: { padding: 4, marginTop: 4, marginBottom: 2 },
   madeWithContainer: { paddingVertical: 12 },
   madeWithRow: { flexDirection: "row", alignItems: "center" },
   madeWithText: { fontSize: 14, color: "#666", fontStyle: "italic" },
   madeWithTextDark: { color: "#999" },
   heartIcon: { marginTop: -2 },
-  changelogContainer: { marginTop: 12 },
-  changelogContainerDark: { marginTop: 12 },
+  changelogContainer: {
+    backgroundColor: '#2d2d2d',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+  },
+  changelogContainerDark: {
+    backgroundColor: '#2d2d2d',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+  },
   changelogItem: { marginBottom: 20 },
-  changelogVersion: { fontSize: 16, fontWeight: "700", color: "#6366f1", marginBottom: 4 },
+  changelogVersion: { fontSize: 16, fontWeight: "700", color: "#818cf8", marginBottom: 4 },
   changelogVersionDark: { color: "#818cf8" },
   changelogDate: { fontSize: 12, color: "#999", marginBottom: 8 },
   changelogDateDark: { color: "#666" },
-  changelogText: { fontSize: 14, color: "#666", lineHeight: 22 },
-  changelogTextDark: { color: "#999" },
+  changelogText: { fontSize: 14, color: "#e0e0e0", lineHeight: 22 },
+  changelogTextDark: { color: "#e0e0e0" },
   notification: { position: "absolute", top: 60, left: 20, right: 20, flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6, gap: 12, zIndex: 9999 },
   notificationError: { backgroundColor: "#ef4444" },
   notificationInfo: { backgroundColor: "#6366f1" },
