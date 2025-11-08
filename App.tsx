@@ -15,11 +15,12 @@ import {
   Keyboard,
   Platform,
   Alert,
-  useColorScheme, // ADD THIS IMPORT
+  useColorScheme,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons, AntDesign } from "@expo/vector-icons";
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import axios from "axios";
@@ -145,7 +146,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  const [themeMode, setThemeMode] = useState<"auto" | "light" | "dark">("auto"); // NEW STATE
+  const [themeMode, setThemeMode] = useState<"auto" | "light" | "dark">("auto");
   const [showSettings, setShowSettings] = useState(false);
   const [dateFilter, setDateFilter] = useState<"today" | "tomorrow">("today");
   const [viewMode, setViewMode] = useState<"section" | "professor" | "all">("section");
@@ -159,7 +160,7 @@ export default function App() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
 
-  const systemColorScheme = useColorScheme(); // DETECT SYSTEM THEME
+  const systemColorScheme = useColorScheme();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -167,7 +168,6 @@ export default function App() {
   const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
 
-  // AUTO THEME MODE HANDLER
   useEffect(() => {
     if (themeMode === "auto") {
       setIsDark(systemColorScheme === "dark");
@@ -332,7 +332,7 @@ export default function App() {
       if (savedThemeMode !== null) {
         setThemeMode(JSON.parse(savedThemeMode));
       } else {
-        setThemeMode("auto"); // Default to auto
+        setThemeMode("auto");
       }
       
       if (sections !== null) setSavedSections(JSON.parse(sections));
@@ -702,7 +702,6 @@ export default function App() {
                 </View>
           
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollViewContent}>
-                  {/* THEME SELECTOR - REPLACED */}
                   <View>
                     <View style={styles.sectionHeader}>
                       <MaterialIcons name={isDark ? "dark-mode" : "light-mode"} size={24} color={isDark ? "#fff" : "#1a1a1a"} />
@@ -935,7 +934,50 @@ export default function App() {
                   <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
                     Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
                   </Text>
-                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.6</Text>
+                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.8.5</Text>
+
+                  <View style={[styles.separator, isDark && styles.separatorDark]} />
+                  
+                  <View style={styles.sectionHeader}>
+                    <MaterialIcons name="history" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                    <View style={styles.sectionHeaderText}>
+                      <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Changelog</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={[styles.changelogContainer, isDark && styles.changelogContainerDark]}>
+                    <View style={styles.changelogItem}>
+                      <Text style={[styles.changelogVersion, isDark && styles.changelogVersionDark]}>v0.8.5</Text>
+                      <Text style={[styles.changelogDate, isDark && styles.changelogDateDark]}>8 Novembre 2025</Text>
+                      <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>
+                        • Aggiunto supporto tema automatico{"\n"}
+                        • Miglioramenti UI e performance{"\n"}
+                        • Aggiunti changelog{"\n"}
+                        • Fix notifiche push
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    onPress={() => {
+                      Linking.openURL('https://github.com/aamritt0/FermiToday').catch((err) =>
+                        Alert.alert('Errore', 'Impossibile aprire il link')
+                      );
+                    }}
+                    activeOpacity={0.6}
+                    style={styles.githubIconButton}
+                  >
+                    <AntDesign name="github" size={24} color={isDark ? "#999" : "#666"} />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.madeWithContainer}>
+                    <View style={styles.madeWithRow}>
+                      <Text style={[styles.madeWithText, isDark && styles.madeWithTextDark]}>Made with </Text>
+                      <MaterialIcons name="favorite" size={18} color="#ef4444" style={styles.heartIcon} />
+                    </View>
+                  </View>
+                  
+                  
                 </ScrollView>
               </View>
             </View>
@@ -1044,7 +1086,6 @@ const styles = StyleSheet.create({
   sectionTitleDark: { color: "#ffffff" },
   sectionSubtext: { fontSize: 13, color: "#666" },
   sectionSubtextDark: { color: "#999" },
-  // NEW THEME BUTTON STYLES
   themeButtonsContainer: { flexDirection: "row", gap: 8, marginTop: 12 },
   themeButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: "#f5f5f7", gap: 6 },
   themeButtonDark: { backgroundColor: "#2a2a2a" },
@@ -1052,7 +1093,6 @@ const styles = StyleSheet.create({
   themeButtonText: { fontSize: 14, fontWeight: "600", color: "#666" },
   themeButtonTextDark: { color: "#999" },
   themeButtonTextActive: { color: "#fff" },
-  // END NEW STYLES
   notificationInput: { marginTop: 12 },
   notificationInputDark: { marginTop: 12 },
   timePickerContainer: { marginTop: 12, marginBottom: 8 },
@@ -1080,8 +1120,23 @@ const styles = StyleSheet.create({
   aboutTextDark: { color: "#ffffff" },
   aboutSubtext: { fontSize: 14, color: "#666", lineHeight: 20, marginBottom: 12 },
   aboutSubtextDark: { color: "#999" },
-  aboutVersion: { fontSize: 12, color: "#999", fontStyle: "italic" },
+  aboutVersion: { fontSize: 12, color: "#999", fontStyle: "italic", marginBottom: 12 },
   aboutVersionDark: { color: "#666" },
+  githubIconButton: { padding: 4, marginBottom: 2 },
+  madeWithContainer: { paddingVertical: 12 },
+  madeWithRow: { flexDirection: "row", alignItems: "center" },
+  madeWithText: { fontSize: 14, color: "#666", fontStyle: "italic" },
+  madeWithTextDark: { color: "#999" },
+  heartIcon: { marginTop: -2 },
+  changelogContainer: { marginTop: 12 },
+  changelogContainerDark: { marginTop: 12 },
+  changelogItem: { marginBottom: 20 },
+  changelogVersion: { fontSize: 16, fontWeight: "700", color: "#6366f1", marginBottom: 4 },
+  changelogVersionDark: { color: "#818cf8" },
+  changelogDate: { fontSize: 12, color: "#999", marginBottom: 8 },
+  changelogDateDark: { color: "#666" },
+  changelogText: { fontSize: 14, color: "#666", lineHeight: 22 },
+  changelogTextDark: { color: "#999" },
   notification: { position: "absolute", top: 60, left: 20, right: 20, flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6, gap: 12, zIndex: 9999 },
   notificationError: { backgroundColor: "#ef4444" },
   notificationInfo: { backgroundColor: "#6366f1" },
