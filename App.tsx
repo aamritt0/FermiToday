@@ -15,6 +15,7 @@ import {
   Keyboard,
   Platform,
   Alert,
+  useColorScheme, // ADD THIS IMPORT
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -144,6 +145,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [themeMode, setThemeMode] = useState<"auto" | "light" | "dark">("auto"); // NEW STATE
   const [showSettings, setShowSettings] = useState(false);
   const [dateFilter, setDateFilter] = useState<"today" | "tomorrow">("today");
   const [viewMode, setViewMode] = useState<"section" | "professor" | "all">("section");
@@ -157,11 +159,22 @@ export default function App() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
 
+  const systemColorScheme = useColorScheme(); // DETECT SYSTEM THEME
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const notificationAnim = useRef(new Animated.Value(0)).current;
   const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
+
+  // AUTO THEME MODE HANDLER
+  useEffect(() => {
+    if (themeMode === "auto") {
+      setIsDark(systemColorScheme === "dark");
+    } else {
+      setIsDark(themeMode === "dark");
+    }
+  }, [themeMode, systemColorScheme]);
 
   const showNotification = (message: string, type: "error" | "info" = "error") => {
     setNotification({ message, type });
@@ -173,51 +186,51 @@ export default function App() {
   };
 
   async function registerForPushNotificationsAsync() {
-  let token;
-  
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('fermitoday_updates', {
-      name: 'FermiToday Updates',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#6366f1',
-    });
-  }
-  
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+    let token;
     
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('fermitoday_updates', {
+        name: 'FermiToday Updates',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#6366f1',
+      });
     }
     
-    if (finalStatus !== 'granted') {
-      Alert.alert(
-        'Notifiche disabilitate', 
-        'Per ricevere le notifiche sulle variazioni, attiva le notifiche nelle impostazioni.'
-      );
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        Alert.alert(
+          'Notifiche disabilitate', 
+          'Per ricevere le notifiche sulle variazioni, attiva le notifiche nelle impostazioni.'
+        );
+        return null;
+      }
+      
+      try {
+        token = (await Notifications.getExpoPushTokenAsync({ 
+          projectId: '80ad0eb0-cd57-4b36-bebd-10bb86061534' 
+        })).data;
+        console.log('✅ Push token obtained:', token.substring(0, 30) + '...');
+      } catch (error: any) {
+        console.error('❌ Failed to get push token:', error.message);
+        Alert.alert('Errore', 'Impossibile ottenere il token delle notifiche: ' + error.message);
+        return null;
+      }
+    } else {
+      Alert.alert('Errore', 'Le notifiche funzionano solo su dispositivi fisici.');
       return null;
     }
     
-    try {
-      token = (await Notifications.getExpoPushTokenAsync({ 
-        projectId: '80ad0eb0-cd57-4b36-bebd-10bb86061534' 
-      })).data;
-      console.log('✅ Push token obtained:', token.substring(0, 30) + '...');
-    } catch (error: any) {
-      console.error('❌ Failed to get push token:', error.message);
-      Alert.alert('Errore', 'Impossibile ottenere il token delle notifiche: ' + error.message);
-      return null;
-    }
-  } else {
-    Alert.alert('Errore', 'Le notifiche funzionano solo su dispositivi fisici.');
-    return null;
+    return token;
   }
-  
-  return token;
-}
 
   async function registerTokenWithBackend(token: string) {
     try {
@@ -300,12 +313,12 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => { saveSettings(); }, [isDark, savedSections, savedProfessors, notificationsEnabled, notificationSection, notificationProfessor, digestEnabled, digestTime, realtimeEnabled]);
+  useEffect(() => { saveSettings(); }, [themeMode, savedSections, savedProfessors, notificationsEnabled, notificationSection, notificationProfessor, digestEnabled, digestTime, realtimeEnabled]);
   useEffect(() => { if (notificationsEnabled && expoPushToken) updatePreferencesOnBackend(); }, [notificationSection, notificationProfessor, digestEnabled, digestTime, realtimeEnabled]);
 
   const loadSettings = async () => {
     try {
-      const darkMode = await AsyncStorage.getItem("darkMode");
+      const savedThemeMode = await AsyncStorage.getItem("themeMode");
       const sections = await AsyncStorage.getItem("savedSections");
       const professors = await AsyncStorage.getItem("savedProfessors");
       const notifEnabled = await AsyncStorage.getItem('notificationsEnabled');
@@ -315,7 +328,13 @@ export default function App() {
       const digestT = await AsyncStorage.getItem('digestTime');
       const realtime = await AsyncStorage.getItem('realtimeEnabled');
       const pushToken = await AsyncStorage.getItem('expoPushToken');
-      if (darkMode !== null) setIsDark(JSON.parse(darkMode));
+      
+      if (savedThemeMode !== null) {
+        setThemeMode(JSON.parse(savedThemeMode));
+      } else {
+        setThemeMode("auto"); // Default to auto
+      }
+      
       if (sections !== null) setSavedSections(JSON.parse(sections));
       if (professors !== null) setSavedProfessors(JSON.parse(professors));
       if (notifEnabled !== null) setNotificationsEnabled(JSON.parse(notifEnabled));
@@ -325,11 +344,12 @@ export default function App() {
       if (digestT !== null) setDigestTime(digestT);
       if (realtime !== null) setRealtimeEnabled(JSON.parse(realtime));
       if (pushToken !== null) setExpoPushToken(pushToken);
+      
       const onboardingComplete = await AsyncStorage.getItem('onboardingComplete');
       if (onboardingComplete !== null) {
         setHasCompletedOnboarding(JSON.parse(onboardingComplete));
       } else {
-        setHasCompletedOnboarding(false); // First time user
+        setHasCompletedOnboarding(false);
       }
     } catch (error) {
       console.error("Error loading settings:", error);
@@ -338,7 +358,7 @@ export default function App() {
 
   const saveSettings = async () => {
     try {
-      await AsyncStorage.setItem("darkMode", JSON.stringify(isDark));
+      await AsyncStorage.setItem("themeMode", JSON.stringify(themeMode));
       await AsyncStorage.setItem("savedSections", JSON.stringify(savedSections));
       await AsyncStorage.setItem("savedProfessors", JSON.stringify(savedProfessors));
       await AsyncStorage.setItem('notificationsEnabled', JSON.stringify(notificationsEnabled));
@@ -353,7 +373,6 @@ export default function App() {
     }
   };
 
-  //handle onboarding completion
   const handleOnboardingComplete = async () => {
     try {
       await AsyncStorage.setItem('onboardingComplete', JSON.stringify(true));
@@ -364,91 +383,83 @@ export default function App() {
   };
 
   const toggleNotifications = async (enabled: boolean) => {
-  if (enabled) {
-    try {
-      // First, get the push token
-      const token = await registerForPushNotificationsAsync();
-      
-      if (!token) {
-        showNotification('Impossibile ottenere il token delle notifiche', 'error');
-        return; // Don't enable notifications
-      }
-
-      console.log('✅ Got push token:', token.substring(0, 30) + '...');
-      
-      // Save token to state and AsyncStorage
-      setExpoPushToken(token);
-      await AsyncStorage.setItem('expoPushToken', token);
-
-      // Prepare payload for backend
-      const payload = {
-        token: token,
-        section: notificationSection.trim() || null,
-        professor: notificationProfessor.trim() || null,
-        digestEnabled: digestEnabled,
-        digestTime: digestTime,
-        realtimeEnabled: realtimeEnabled
-      };
-      
-      console.log('📤 Registering with backend:', {
-        tokenPreview: token.substring(0, 30) + '...',
-        section: payload.section,
-        professor: payload.professor,
-        digestEnabled: payload.digestEnabled,
-        realtimeEnabled: payload.realtimeEnabled
-      });
-      
-      // Register with backend
-      const response = await axios.post(
-        `${BACKEND_URL}/register-token`, 
-        payload,
-        {
-          timeout: 10000,
-          headers: { 'Content-Type': 'application/json' }
+    if (enabled) {
+      try {
+        const token = await registerForPushNotificationsAsync();
+        
+        if (!token) {
+          showNotification('Impossibile ottenere il token delle notifiche', 'error');
+          return;
         }
-      );
-      
-      console.log('✅ Backend registration successful:', response.data);
-      
-      // Only enable notifications after successful backend registration
-      setNotificationsEnabled(true);
-      showNotification('Notifiche attivate! Configura classe o professore.', 'info');
-      
-    } catch (error: any) {
-      console.error('❌ Notification registration failed:', error.response?.data || error.message);
-      
-      // Clean up on failure
-      setExpoPushToken('');
-      setNotificationsEnabled(false);
-      
-      // Show specific error message
-      let errorMessage = 'Errore nell\'attivazione delle notifiche';
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Timeout nella registrazione. Riprova.';
-      } else if (error.response) {
-        errorMessage = error.response.data?.error || 'Errore del server';
-      } else if (error.request) {
-        errorMessage = 'Nessuna connessione al server';
+
+        console.log('✅ Got push token:', token.substring(0, 30) + '...');
+        
+        setExpoPushToken(token);
+        await AsyncStorage.setItem('expoPushToken', token);
+
+        const payload = {
+          token: token,
+          section: notificationSection.trim() || null,
+          professor: notificationProfessor.trim() || null,
+          digestEnabled: digestEnabled,
+          digestTime: digestTime,
+          realtimeEnabled: realtimeEnabled
+        };
+        
+        console.log('📤 Registering with backend:', {
+          tokenPreview: token.substring(0, 30) + '...',
+          section: payload.section,
+          professor: payload.professor,
+          digestEnabled: payload.digestEnabled,
+          realtimeEnabled: payload.realtimeEnabled
+        });
+        
+        const response = await axios.post(
+          `${BACKEND_URL}/register-token`, 
+          payload,
+          {
+            timeout: 10000,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+        
+        console.log('✅ Backend registration successful:', response.data);
+        
+        setNotificationsEnabled(true);
+        showNotification('Notifiche attivate! Configura classe o professore.', 'info');
+        
+      } catch (error: any) {
+        console.error('❌ Notification registration failed:', error.response?.data || error.message);
+        
+        setExpoPushToken('');
+        setNotificationsEnabled(false);
+        
+        let errorMessage = 'Errore nell\'attivazione delle notifiche';
+        if (error.code === 'ECONNABORTED') {
+          errorMessage = 'Timeout nella registrazione. Riprova.';
+        } else if (error.response) {
+          errorMessage = error.response.data?.error || 'Errore del server';
+        } else if (error.request) {
+          errorMessage = 'Nessuna connessione al server';
+        }
+        
+        showNotification(errorMessage, 'error');
       }
-      
-      showNotification(errorMessage, 'error');
-    }
-  } else {
-    // Disable notifications
-    try {
-      if (expoPushToken) {
-        await unregisterTokenFromBackend(expoPushToken);
+    } else {
+      try {
+        if (expoPushToken) {
+          await unregisterTokenFromBackend(expoPushToken);
+        }
+        setNotificationsEnabled(false);
+        setExpoPushToken('');
+        await AsyncStorage.removeItem('expoPushToken');
+        showNotification('Notifiche disattivate', 'info');
+      } catch (error) {
+        console.error('❌ Error disabling notifications:', error);
+        showNotification('Errore nella disattivazione', 'error');
       }
-      setNotificationsEnabled(false);
-      setExpoPushToken('');
-      await AsyncStorage.removeItem('expoPushToken');
-      showNotification('Notifiche disattivate', 'info');
-    } catch (error) {
-      console.error('❌ Error disabling notifications:', error);
-      showNotification('Errore nella disattivazione', 'error');
     }
-  }
-};
+  };
 
   const fetchEvents = React.useCallback(async (isRefresh = false, targetSection?: string, targetProfessor?: string, targetDate?: "today" | "tomorrow") => {
     Keyboard.dismiss();
@@ -691,15 +702,70 @@ export default function App() {
                 </View>
           
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollViewContent}>
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                      <MaterialIcons name="dark-mode" size={24} color={isDark ? "#fff" : "#1a1a1a"} />
-                      <View style={styles.settingTextContainer}>
-                        <Text style={[styles.settingLabel, isDark && styles.settingLabelDark]}>Tema scuro</Text>
-                        <Text style={[styles.settingSubtext, isDark && styles.settingSubtextDark]}>Applica tema scuro</Text>
+                  {/* THEME SELECTOR - REPLACED */}
+                  <View>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons name={isDark ? "dark-mode" : "light-mode"} size={24} color={isDark ? "#fff" : "#1a1a1a"} />
+                      <View style={styles.sectionHeaderText}>
+                        <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>Tema</Text>
+                        <Text style={[styles.sectionSubtext, isDark && styles.sectionSubtextDark]}>
+                          {themeMode === "auto" ? "Automatico (segue il sistema)" : themeMode === "dark" ? "Scuro" : "Chiaro"}
+                        </Text>
                       </View>
                     </View>
-                    <Switch value={isDark} onValueChange={setIsDark} trackColor={{ false: "#d1d5db", true: "#818cf8" }} thumbColor={isDark ? "#6366f1" : "#f3f4f6"} />
+
+                    <View style={styles.themeButtonsContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.themeButton,
+                          themeMode === "light" && styles.themeButtonActive,
+                          isDark && themeMode !== "light" && styles.themeButtonDark
+                        ]}
+                        onPress={() => setThemeMode("light")}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="light-mode" size={20} color={themeMode === "light" ? "#fff" : isDark ? "#999" : "#666"} />
+                        <Text style={[
+                          styles.themeButtonText,
+                          themeMode === "light" && styles.themeButtonTextActive,
+                          isDark && themeMode !== "light" && styles.themeButtonTextDark
+                        ]}>Chiaro</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.themeButton,
+                          themeMode === "auto" && styles.themeButtonActive,
+                          isDark && themeMode !== "auto" && styles.themeButtonDark
+                        ]}
+                        onPress={() => setThemeMode("auto")}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="brightness-auto" size={20} color={themeMode === "auto" ? "#fff" : isDark ? "#999" : "#666"} />
+                        <Text style={[
+                          styles.themeButtonText,
+                          themeMode === "auto" && styles.themeButtonTextActive,
+                          isDark && themeMode !== "auto" && styles.themeButtonTextDark
+                        ]}>Auto</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.themeButton,
+                          themeMode === "dark" && styles.themeButtonActive,
+                          isDark && themeMode !== "dark" && styles.themeButtonDark
+                        ]}
+                        onPress={() => setThemeMode("dark")}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="dark-mode" size={20} color={themeMode === "dark" ? "#fff" : isDark ? "#999" : "#666"} />
+                        <Text style={[
+                          styles.themeButtonText,
+                          themeMode === "dark" && styles.themeButtonTextActive,
+                          isDark && themeMode !== "dark" && styles.themeButtonTextDark
+                        ]}>Scuro</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
           
                   <View style={[styles.separator, isDark && styles.separatorDark]} />
@@ -869,7 +935,7 @@ export default function App() {
                   <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
                     Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
                   </Text>
-                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.5</Text>
+                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.7.6</Text>
                 </ScrollView>
               </View>
             </View>
@@ -978,6 +1044,15 @@ const styles = StyleSheet.create({
   sectionTitleDark: { color: "#ffffff" },
   sectionSubtext: { fontSize: 13, color: "#666" },
   sectionSubtextDark: { color: "#999" },
+  // NEW THEME BUTTON STYLES
+  themeButtonsContainer: { flexDirection: "row", gap: 8, marginTop: 12 },
+  themeButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: "#f5f5f7", gap: 6 },
+  themeButtonDark: { backgroundColor: "#2a2a2a" },
+  themeButtonActive: { backgroundColor: "#6366f1" },
+  themeButtonText: { fontSize: 14, fontWeight: "600", color: "#666" },
+  themeButtonTextDark: { color: "#999" },
+  themeButtonTextActive: { color: "#fff" },
+  // END NEW STYLES
   notificationInput: { marginTop: 12 },
   notificationInputDark: { marginTop: 12 },
   timePickerContainer: { marginTop: 12, marginBottom: 8 },
