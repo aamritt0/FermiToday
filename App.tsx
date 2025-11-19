@@ -47,9 +47,11 @@ type Event = {
   isAllDay?: boolean;
 };
 
-const extractClassFromSummary = (summary: string): string | null => {
-  const classMatch = summary.match(/CLASSE\s+([A-Z0-9]+)\s/);
-  return classMatch ? classMatch[1] : null;
+const extractClassFromSummary = (summary: string): string[] => {
+  const match = summary.match(/CLASS[EI]\s+([A-Z0-9,\s]+?)(?=\s*[-–]|\s+AULA|\s+PROF|\s*$)/i);
+  if (!match) return [];
+  const classPart = match[1];
+  return classPart.split(/[,\s]+/).filter(c => c.trim().length > 0);
 };
 
 const extractProfessorFromSummary = (summary: string): string[] => {
@@ -78,8 +80,8 @@ const extractProfessorFromSummary = (summary: string): string[] => {
 const filterEventsByClass = (events: Event[], classCode: string): Event[] => {
   const upperClassCode = classCode.toUpperCase().trim();
   return events.filter((event) => {
-    const extractedClass = extractClassFromSummary(event.summary);
-    return extractedClass === upperClassCode;
+    const extractedClasses = extractClassFromSummary(event.summary);
+    return extractedClasses.includes(upperClassCode);
   });
 };
 
@@ -934,7 +936,7 @@ export default function App() {
                   <Text style={[styles.aboutSubtext, isDark && styles.aboutSubtextDark]}>
                     Visualizza le variazioni dell'orario giornaliero della tua classe, dei tuoi professori, o quella dei tuoi amici.{"\n"}Basta inserire la classe o il nome del professore per vedere eventuali modifiche all'orario di oggi.{"\n"}NON UFFICIALE
                   </Text>
-                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.8.5</Text>
+                  <Text style={[styles.aboutVersion, isDark && styles.aboutVersionDark]}>Version 0.9.0</Text>
 
                   <View style={[styles.separator, isDark && styles.separatorDark]} />
                   
@@ -947,14 +949,10 @@ export default function App() {
                   
                   <View style={[styles.changelogContainer, isDark && styles.changelogContainerDark]}>
                     <View style={styles.changelogItem}>
-                      <Text style={[styles.changelogVersion, isDark && styles.changelogVersionDark]}>v0.8.5</Text>
-                      <Text style={[styles.changelogDate, isDark && styles.changelogDateDark]}>8 Novembre 2025</Text>
+                      <Text style={[styles.changelogVersion, isDark && styles.changelogVersionDark]}>v0.9.0</Text>
+                      <Text style={[styles.changelogDate, isDark && styles.changelogDateDark]}>19 Novembre 2025</Text>
                       <View>
-                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Aggiunto supporto tema automatico</Text>
-                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Miglioramenti UI e performance</Text>
-                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Aggiunti changelog</Text>
-                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Fix notifiche push</Text>
-                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Fix background dei pulsanti per selezione orario</Text>
+                        <Text style={[styles.changelogText, isDark && styles.changelogTextDark]}>• Ora mostra eventi che riguardano più classi</Text>
                       </View>
                     </View>
                   </View>
